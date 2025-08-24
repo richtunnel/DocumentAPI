@@ -1,6 +1,6 @@
 import { app, Timer, InvocationContext } from '@azure/functions';
 import { queueService } from '../../shared/services/queue.service';
-import { QueueMessage } from '../shared/types';
+import { QueueMessage } from '../../shared/types/demographics';
 import winston from 'winston';
 
 const logger = winston.createLogger({

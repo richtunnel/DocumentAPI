@@ -3,8 +3,7 @@
   "logging": {
     "applicationInsights": {
       "samplingSettings": {
-        "isEnabled": true,
-        "excludedTypes": "Request"
+        "isEnabled": true
       }
     }
   },
@@ -12,7 +11,28 @@
     "id": "Microsoft.Azure.Functions.ExtensionBundle",
     "version": "[4.*, 5.0.0)"
   },
-  "functionTimeout": "00:10:00",
+  "extensions": {
+    "serviceBus": {
+      "prefetchCount": 32,
+      "messageHandlerOptions": {
+        "autoComplete": true,
+        "maxConcurrentCalls": 16,
+        "maxAutoRenewDuration": "00:05:00"
+      },
+      "sessionHandlerOptions": {
+        "autoComplete": false,
+        "messageWaitTimeout": "00:00:30",
+        "maxAutoRenewDuration": "00:55:00",
+        "maxConcurrentSessions": 8
+      },
+      "batchOptions": {
+        "maxMessageCount": 16,
+        "operationTimeout": "00:01:00",
+        "autoComplete": true
+      }
+    }
+  },
+  "functionTimeout": "00:05:00",
   "healthMonitor": {
     "enabled": true,
     "healthCheckInterval": "00:00:30",
@@ -24,10 +44,13 @@
     "dynamicConcurrencyEnabled": true,
     "snapshotPersistenceEnabled": true
   },
-  "retry": {
+    "retry": {
     "strategy": "exponentialBackoff",
     "maxRetryCount": 3,
     "minimumInterval": "00:00:02",
     "maximumInterval": "00:00:30"
   }
 }
+
+
+

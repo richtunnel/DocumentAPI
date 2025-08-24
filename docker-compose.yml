@@ -1,51 +1,79 @@
 version: '3.8'
 
 services:
-  demographics-api:
-    build: .
+  # SQL Server Database
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: demographics-mssql
+    environment:
+      ACCEPT_EULA: Y
+      SA_PASSWORD: YourStrong@Password123
+      MSSQL_PID: Developer
     ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=development
-      - PORT=3000
-      - SERVICE_BUS_CONNECTION_STRING=${SERVICE_BUS_CONNECTION_STRING}
-      - BLOB_STORAGE_CONNECTION_STRING=${BLOB_STORAGE_CONNECTION_STRING}
-      - COSMOS_CONNECTION_STRING=${COSMOS_CONNECTION_STRING}
-      - JWT_SECRET=${JWT_SECRET}
+      - "1433:1433"
     volumes:
-      - ./logs:/app/logs
+      - mssql_data:/var/opt/mssql
+      - ./scripts:/scripts
+    restart: unless-stopped
+    healthcheck:
+      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P YourStrong@Password123 -Q "SELECT 1"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Redis for Rate Limiting
+  redis:
+    image: redis:7-alpine
+    container_name: demographics-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: redis-cli ping
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Azurite for Local Storage (Azure Storage Emulator)
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: demographics-azurite
+    ports:
+      - "10000:10000"  # Blob service
+      - "10001:10001"  # Queue service
+      - "10002:10002"  # Table service
+    volumes:
+      - azurite_data:/data
+    command: azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --location /data --debug /data/debug.log
+    restart: unless-stopped
+
+  # Database Initialization
+  db-init:
+    image: mcr.microsoft.com/mssql-tools
+    container_name: demographics-db-init
     depends_on:
-      - demographics-worker
-      - webhook-processor
-
-  demographics-worker:
-    build: .
-    command: npm run worker
-    environment:
-      - NODE_ENV=development
-      - SERVICE_BUS_CONNECTION_STRING=${SERVICE_BUS_CONNECTION_STRING}
-      - COSMOS_CONNECTION_STRING=${COSMOS_CONNECTION_STRING}
-      - MAX_CONCURRENT_CALLS=5
+      mssql:
+        condition: service_healthy
     volumes:
-      - ./logs:/app/logs
-    restart: unless-stopped
+      - ./scripts:/scripts
+    command: >
+      bash -c "
+        echo 'Waiting for SQL Server to be ready...'
+        sleep 10
+        echo 'Running database initialization...'
+        /opt/mssql-tools/bin/sqlcmd -S mssql -U sa -P YourStrong@Password123 -i /scripts/init-database.sql
+        echo 'Database initialization completed!'
+      "
+    restart: "no"
 
-  webhook-processor:
-    build: .
-    command: npm run webhook-processor
-    environment:
-      - NODE_ENV=development
-      - SERVICE_BUS_CONNECTION_STRING=${SERVICE_BUS_CONNECTION_STRING}
-      - COSMOS_CONNECTION_STRING=${COSMOS_CONNECTION_STRING}
-      - WEBHOOK_PROCESSING_INTERVAL=*/5 * * * *
-    volumes:
-      - ./logs:/app/logs
-    restart: unless-stopped
-
-  # Optional: Local Azure Service Bus Emulator (if available)
-  # azurite:
-  #   image: mcr.microsoft.com/azure-storage/azurite
-  #   ports:
-  #     - "10000:10000"
-  #     - "10001:10001"
-  #     - "10002:10002"
+volumes:
+  mssql_data:
+    driver: local
+  redis_data:
+    driver: local
+  azurite_data:
+    driver: local

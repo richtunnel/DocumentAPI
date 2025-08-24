@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # Azure Functions Development Container
+  functions-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: demographics-functions-dev
+    environment:
+      - AzureWebJobsStorage=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;
+      - FUNCTIONS_WORKER_RUNTIME=node
+      - languageWorkers__node__arguments=--inspect=0.0.0.0:9229
+      # Database
+      - DB_SERVER=mssql
+      - DB_DATABASE=DemographicsDB  
+      - DB_USER=sa
+      - DB_PASSWORD=YourStrong@Password123
+      - DB_PORT=1433
+      # Redis Rate Limiting
+      - REDIS_CONNECTION_STRING=redis://redis:6379
+      # Queue (Azurite)
+      - QUEUE_CONNECTION_STRING=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://azurite:10001/devstoreaccount1;
+      # Security
+      - JWT_SECRET=your-development-jwt-secret-key-32-chars-minimum
+      - API_KEY_ENCRYPTION_KEY=your-32-character-encryption-key
+      - WEBHOOK_SECRET=your-webhook-secret-key
+      - ENVIRONMENT=development
+    volumes:
+      - ./src:/home/site/wwwroot/src
+      - ./logs:/home/site/wwwroot/logs
+      - ./host.json:/home/site/wwwroot/host.json
+      - ./local.settings.json:/home/site/wwwroot/local.settings.json
+    depends_on:
+      mssql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      azurite:
+        condition: service_started
+      db-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    
+  # Enable debugging
+    ports:
+      - "7071:7071"  # Functions runtime
+      - "9229:9229"  # Node.js debugger
+

@@ -1,8 +1,10 @@
 import { app, HttpRequest, HttpResponse, InvocationContext } from '@azure/functions';
 import { v4 as uuidv4 } from 'uuid';
-import { databaseService } from '../shared/database/database';
+import { CreateDemographicsRequestSchema, Demographics } from '../shared/types/demographics';
+import { databaseService } from '../shared/database/database.service';
 import { apiKeyService } from '../shared/services/apiKey.service';
 import { rateLimiter } from '../shared/services/rateLimiter.service';
+import { queueService } from '../shared/services/queue.service';
 import winston from 'winston';
 
 const logger = winston.createLogger({
@@ -16,12 +18,12 @@ const logger = winston.createLogger({
   ]
 });
 
-async function getDemographicById(request: HttpRequest, context: InvocationContext): Promise<HttpResponse> {
+async function submitDemographics(request: HttpRequest, context: InvocationContext): Promise<HttpResponse> {
   const requestId = uuidv4();
   const startTime = Date.now();
   
   try {
-    logger.info('Get demographic by ID started', { requestId });
+    logger.info('Demographics submission started', { requestId });
 
     // Get client IP
     const clientIP = request.headers.get('x-forwarded-for') || 
@@ -40,7 +42,7 @@ async function getDemographicById(request: HttpRequest, context: InvocationConte
     const { apiKey, isValid, error } = await apiKeyService.validateApiKey(
       apiKeyHeader,
       clientIP,
-      ['demographics:read']
+      ['demographics:write']
     );
 
     if (!isValid) {
@@ -69,45 +71,69 @@ async function getDemographicById(request: HttpRequest, context: InvocationConte
       });
     }
 
-    // Get demographic ID from route parameters
-    const demographicId = request.params.id;
-    if (!demographicId) {
+    // Parse and validate request body
+    const body = await request.json();
+    const validation = CreateDemographicsRequestSchema.safeParse(body);
+    
+    if (!validation.success) {
       return new HttpResponse({
         status: 400,
-        jsonBody: { error: 'Demographic ID required', requestId }
+        jsonBody: { 
+          error: 'Validation failed', 
+          details: validation.error.issues,
+          requestId 
+        }
       });
     }
 
-    // Retrieve specific demographic
-    const demographic = await databaseService.getDemographicById(
-      demographicId,
-      apiKey.law_firm
-    );
+    const demographicsData = validation.data;
+    const now = new Date().toISOString();
 
-    if (!demographic) {
-      return new HttpResponse({
-        status: 404,
-        jsonBody: { error: 'Demographic not found', requestId }
-      });
-    }
+    // Create demographics record
+    const demographics: Demographics = {
+      id: uuidv4(),
+      partitionKey: apiKey.law_firm,
+      ...demographicsData,
+      created_at: now,
+      updated_at: now,
+      created_by: apiKey.created_by,
+    };
+
+    // Save to database
+    await databaseService.createDemographic(demographics);
+
+    // Add webhook notification to queue
+    await queueService.addWebhookMessage({
+      event: 'demographics.created',
+      data: {
+        id: demographics.id,
+        law_firm: demographics.law_firm,
+        created_at: demographics.created_at,
+      },
+      metadata: {
+        apiKeyId: apiKey.key_id,
+        requestId,
+      }
+    });
 
     const processingTime = Date.now() - startTime;
-    logger.info('Get demographic by ID completed', { 
+    logger.info('Demographics submission completed', { 
       requestId, 
-      demographicId,
-      lawFirm: apiKey.law_firm,
+      demographicsId: demographics.id,
+      lawFirm: demographics.law_firm,
       processingTime 
     });
 
     return new HttpResponse({
-      status: 200,
+      status: 201,
       headers: {
         'X-RateLimit-Limit': rateLimitResult.limit.toString(),
         'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
         'X-RateLimit-Reset': rateLimitResult.resetTime.toISOString(),
       },
       jsonBody: {
-        data: demographic,
+        id: demographics.id,
+        message: 'Demographics submitted successfully',
         requestId,
         processingTime
       }
@@ -115,7 +141,7 @@ async function getDemographicById(request: HttpRequest, context: InvocationConte
 
   } catch (error) {
     const processingTime = Date.now() - startTime;
-    logger.error('Error getting demographic by ID', { requestId, error, processingTime });
+    logger.error('Error submitting demographics', { requestId, error, processingTime });
     
     return new HttpResponse({
       status: 500,
@@ -128,9 +154,9 @@ async function getDemographicById(request: HttpRequest, context: InvocationConte
   }
 }
 
-app.http('getDemographicById', {
-  methods: ['GET'],
+app.http('submitDemographics', {
+  methods: ['POST'],
   authLevel: 'anonymous',
-  route: 'demographics/{id}',
-  handler: getDemographicById
+  route: 'demographics',
+  handler: submitDemographics
 });

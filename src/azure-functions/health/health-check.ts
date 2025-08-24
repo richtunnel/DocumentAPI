@@ -1,19 +1,8 @@
 import { app, HttpRequest, HttpResponse, InvocationContext } from '@azure/functions';
-import { databaseService } from '../../shared/database/database';
+import { databaseService } from '../../shared/database/database.service';
 import { queueService } from '../../shared/services/queue.service';
 import { rateLimiter } from '../../shared/services/rateLimiter.service';
-import winston from 'winston';
-
-const logger = winston.createLogger({
-  level: 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [
-    new winston.transports.Console()
-  ]
-});
+import { logger } from '../monitor/winstonLogger';
 
 interface HealthCheckResult {
   service: string;

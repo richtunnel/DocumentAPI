@@ -58,7 +58,7 @@ class DatabaseService {
     // Create parameterized query with all the fields
     const query = `
       INSERT INTO Demographics (
-        id, partitionKey, law_firm_approval, firstname, lastname, sf_id, ml_id,
+        id, partitionKey, law_firm, law_firm_approval, firstname, lastname, sf_id, ml_id,
         law_firm_client_id, otherid, primarylawfirm, claimanttype, liensfinal,
         bankruptcy, bankruptcycleared, probate, probatecleared, pathway_opt_in_status,
         dod, serviceoptions, disbursementcount, milestonedisbursementid, paygroupid,
