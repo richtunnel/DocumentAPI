@@ -128,11 +128,12 @@ __azurite_db*__.json
 test-files/
 *.test.pdf
 test-*.pdf
+__test__
 
 # Temporary files
 tmp/
 temp/
 .tmp/
 
-# Lock files (keep package-lock.json for reproducible builds)
-# yarn.lock
+package-lock*.json
+yarn.lock
