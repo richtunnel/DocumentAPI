@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  demographics-api:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - SERVICE_BUS_CONNECTION_STRING=${SERVICE_BUS_CONNECTION_STRING}
+      - BLOB_STORAGE_CONNECTION_STRING=${BLOB_STORAGE_CONNECTION_STRING}
+      - COSMOS_CONNECTION_STRING=${COSMOS_CONNECTION_STRING}
+      - JWT_SECRET=${JWT_SECRET}
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      - demographics-worker
+      - webhook-processor
+
+  demographics-worker:
+    build: .
+    command: npm run worker
+    environment:
+      - NODE_ENV=development
+      - SERVICE_BUS_CONNECTION_STRING=${SERVICE_BUS_CONNECTION_STRING}
+      - COSMOS_CONNECTION_STRING=${COSMOS_CONNECTION_STRING}
+      - MAX_CONCURRENT_CALLS=5
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+
+  webhook-processor:
+    build: .
+    command: npm run webhook-processor
+    environment:
+      - NODE_ENV=development
+      - SERVICE_BUS_CONNECTION_STRING=${SERVICE_BUS_CONNECTION_STRING}
+      - COSMOS_CONNECTION_STRING=${COSMOS_CONNECTION_STRING}
+      - WEBHOOK_PROCESSING_INTERVAL=*/5 * * * *
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+
+  # Optional: Local Azure Service Bus Emulator (if available)
+  # azurite:
+  #   image: mcr.microsoft.com/azure-storage/azurite
+  #   ports:
+  #     - "10000:10000"
+  #     - "10001:10001"
+  #     - "10002:10002"

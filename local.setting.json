@@ -1,0 +1,17 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "DB_SERVER": "your-sql-server.database.windows.net",
+    "DB_DATABASE": "your-database-name",
+    "DB_USER": "your-username",
+    "DB_PASSWORD": "your-password",
+    "DB_PORT": "1433",
+    "REDIS_CONNECTION_STRING": "your-redis-connection-string",
+    "QUEUE_CONNECTION_STRING": "your-storage-account-connection-string",
+    "WEBHOOK_SECRET": "your-webhook-secret-key",
+    "API_KEY_ENCRYPTION_KEY": "your-32-char-encryption-key",
+    "ENVIRONMENT": "development"
+  }
+}
