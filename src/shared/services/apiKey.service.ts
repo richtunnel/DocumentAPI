@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { ApiKey, CreateApiKeyRequest } from '../types/apiKey';
-import { databaseService } from '../database/database';
+import { databaseService } from '../database/database.service';
 import winston from 'winston';
 
 const logger = winston.createLogger({

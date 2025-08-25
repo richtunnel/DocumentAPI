@@ -1,18 +1,9 @@
 import sql from 'mssql';
+import { Demographics } from '../types/demographics';
 import { ApiKey } from '../types/apiKey';
-import {Demographics} from '../types/demographics';
-import winston from 'winston';
+import { logger } from '../../azure-functions/monitor/winstonLogger';
 
-const logger = winston.createLogger({
-  level: 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [
-    new winston.transports.Console()
-  ]
-});
+
 
 class DatabaseService {
   private pool: sql.ConnectionPool | null = null;
@@ -58,7 +49,7 @@ class DatabaseService {
     // Create parameterized query with all the fields
     const query = `
       INSERT INTO Demographics (
-        id, partitionKey, law_firm, law_firm_approval, firstname, lastname, sf_id, ml_id,
+        id, partitionKey, law_firm, law_firm_approval, firstname, lastname, email, phone, sf_id, ml_id,
         law_firm_client_id, otherid, primarylawfirm, claimanttype, liensfinal,
         bankruptcy, bankruptcycleared, probate, probatecleared, pathway_opt_in_status,
         dod, serviceoptions, disbursementcount, milestonedisbursementid, paygroupid,
@@ -113,7 +104,7 @@ class DatabaseService {
         attorney10name_cost, attorney10_costdetailname, attorney10_costdetailamount,
         lawfirmnote, created_at, updated_at, created_by, status
       ) VALUES (
-        @id, @partitionKey, @law_firm_approval, @firstname, @lastname, @sf_id, @ml_id,
+        @id, @partitionKey, @law_firm, @law_firm_approval, @firstname, @lastname, @email, @phone, @sf_id, @ml_id,
         @law_firm_client_id, @otherid, @primarylawfirm, @claimanttype, @liensfinal,
         @bankruptcy, @bankruptcycleared, @probate, @probatecleared, @pathway_opt_in_status,
         @dod, @serviceoptions, @disbursementcount, @milestonedisbursementid, @paygroupid,
@@ -170,12 +161,15 @@ class DatabaseService {
       )
     `;
 
-    // Add all parameters to the request
+    // Add all parameters to the request (keeping your existing parameter code)
     request.input('id', sql.UniqueIdentifier, demographic.id);
     request.input('partitionKey', sql.VarChar(75), demographic.partitionKey);
+    request.input('law_firm', sql.VarChar(55), demographic.law_firm);
     request.input('law_firm_approval', sql.VarChar(20), demographic.law_firm_approval);
     request.input('firstname', sql.VarChar(55), demographic.firstname);
     request.input('lastname', sql.VarChar(75), demographic.lastname);
+    request.input('email', sql.VarChar(100), demographic.email);
+    request.input('phone', sql.VarChar(11), demographic.phone);
     request.input('sf_id', sql.VarChar(50), demographic.sf_id);
     request.input('ml_id', sql.VarChar(50), demographic.ml_id);
     request.input('law_firm_client_id', sql.VarChar(50), demographic.law_firm_client_id);
@@ -369,10 +363,97 @@ class DatabaseService {
         OFFSET @offset ROWS
         FETCH NEXT @limit ROWS ONLY
       `);
-          return result.recordset as Demographics[];
+    return result.recordset as Demographics[];
+  }
 
+  // API Key operations
+  async createApiKey(apiKey: ApiKey): Promise<void> {
+    const pool = await this.getPool();
+    const request = pool.request();
+
+    const query = `
+      INSERT INTO ApiKeys (
+        id, partitionKey, key_id, key_hash, name, description, law_firm, created_by,
+        rate_limits, scopes, status, last_used_at, last_used_ip, usage_count, expires_at,
+        created_at, updated_at, allowed_ips, allowed_domains, environment
+      ) VALUES (
+        @id, @partitionKey, @key_id, @key_hash, @name, @description, @law_firm, @created_by,
+        @rate_limits, @scopes, @status, @last_used_at, @last_used_ip, @usage_count, @expires_at,
+        @created_at, @updated_at, @allowed_ips, @allowed_domains, @environment
+      )
+    `;
+
+    request.input('id', sql.UniqueIdentifier, apiKey.id);
+    request.input('partitionKey', sql.VarChar(75), apiKey.partitionKey);
+    request.input('key_id', sql.VarChar(50), apiKey.key_id);
+    request.input('key_hash', sql.VarChar(255), apiKey.key_hash);
+    request.input('name', sql.VarChar(100), apiKey.name);
+    request.input('description', sql.VarChar(500), apiKey.description);
+    request.input('law_firm', sql.VarChar(60), apiKey.law_firm);
+    request.input('created_by', sql.UniqueIdentifier, apiKey.created_by);
+    request.input('rate_limits', sql.NVarChar(sql.MAX), JSON.stringify(apiKey.rate_limits));
+    request.input('scopes', sql.NVarChar(sql.MAX), JSON.stringify(apiKey.scopes));
+    request.input('status', sql.VarChar(20), apiKey.status);
+    request.input('last_used_at', sql.DateTime2, apiKey.last_used_at ? new Date(apiKey.last_used_at) : null);
+    request.input('last_used_ip', sql.VarChar(45), apiKey.last_used_ip);
+    request.input('usage_count', sql.Int, apiKey.usage_count);
+    request.input('expires_at', sql.DateTime2, apiKey.expires_at ? new Date(apiKey.expires_at) : null);
+    request.input('created_at', sql.DateTime2, new Date(apiKey.created_at));
+    request.input('updated_at', sql.DateTime2, new Date(apiKey.updated_at));
+    request.input('allowed_ips', sql.NVarChar(sql.MAX), apiKey.allowed_ips ? JSON.stringify(apiKey.allowed_ips) : null);
+    request.input('allowed_domains', sql.NVarChar(sql.MAX), apiKey.allowed_domains ? JSON.stringify(apiKey.allowed_domains) : null);
+    request.input('environment', sql.VarChar(20), apiKey.environment);
+
+    await request.query(query);
+  }
+
+  async getApiKeyByHash(keyHash: string): Promise<ApiKey | null> {
+    const pool = await this.getPool();
+    const request = pool.request();
+
+    const result = await request
+      .input('key_hash', sql.VarChar(255), keyHash)
+      .query(`
+        SELECT * FROM ApiKeys 
+        WHERE key_hash = @key_hash AND status != 'revoked'
+      `);
+
+    if (result.recordset.length === 0) return null;
+
+    const row = result.recordset[0];
+    
+    // Parse JSON fields
+    return {
+      ...row,
+      rate_limits: JSON.parse(row.rate_limits),
+      scopes: JSON.parse(row.scopes),
+      allowed_ips: row.allowed_ips ? JSON.parse(row.allowed_ips) : null,
+      allowed_domains: row.allowed_domains ? JSON.parse(row.allowed_domains) : null,
+      created_at: row.created_at.toISOString(),
+      updated_at: row.updated_at.toISOString(),
+      expires_at: row.expires_at ? row.expires_at.toISOString() : null,
+      last_used_at: row.last_used_at ? row.last_used_at.toISOString() : null,
+    } as ApiKey;
+  }
+
+  async updateApiKeyUsage(apiKeyId: string, ipAddress: string): Promise<void> {
+    const pool = await this.getPool();
+    const request = pool.request();
+
+    const query = `
+      UPDATE ApiKeys 
+      SET usage_count = usage_count + 1,
+          last_used_at = GETUTCDATE(),
+          last_used_ip = @last_used_ip,
+          updated_at = GETUTCDATE()
+      WHERE id = @id
+    `;
+
+    request.input('id', sql.UniqueIdentifier, apiKeyId);
+    request.input('last_used_ip', sql.VarChar(45), ipAddress);
+
+    await request.query(query);
   }
 }
 
 export const databaseService = new DatabaseService();
-

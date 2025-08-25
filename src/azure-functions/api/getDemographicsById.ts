@@ -1,8 +1,8 @@
 import { app, HttpRequest, HttpResponse, InvocationContext } from '@azure/functions';
 import { v4 as uuidv4 } from 'uuid';
-import { databaseService } from '../shared/database/database.service';
-import { apiKeyService } from '../shared/services/apiKey.service';
-import { rateLimiter } from '../shared/services/rateLimiter.service';
+import { databaseService } from '../../shared/database/database.service';
+import { apiKeyService } from '../../shared/services/apiKey.service';
+import { rateLimiter } from '../../shared/services/rateLimiter.service';
 import winston from 'winston';
 
 const logger = winston.createLogger({
