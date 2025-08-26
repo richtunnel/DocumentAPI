@@ -2,101 +2,58 @@ import { app, HttpRequest, HttpResponse, InvocationContext } from '@azure/functi
 import { v4 as uuidv4 } from 'uuid';
 import { CreateDemographicsRequestSchema, Demographics } from '../../shared/types/demographics';
 import { databaseService } from '../../shared/database/database.service';
-import { apiKeyService } from '../../shared/services/apiKey.service';
-import { rateLimiter } from '../../shared/services/rateLimiter.service';
 import { queueService } from '../../shared/services/queue.service';
-import winston from 'winston';
-
-const logger = winston.createLogger({
-  level: 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [
-    new winston.transports.Console()
-  ]
-});
+import { authMiddleware, addRateLimitHeaders } from '../../shared/middleware/auth.middleware';
+import { logger } from '../monitor/winstonLogger';
 
 async function submitDemographics(request: HttpRequest, context: InvocationContext): Promise<HttpResponse> {
-  const requestId = uuidv4();
   const startTime = Date.now();
   
   try {
-    logger.info('Demographics submission started', { requestId });
+    //  authentication with single line that handle everything
+    const authResult = await authMiddleware(request, context, {
+      requiredScopes: ['demographics:write']
+    });
 
-    // Get client IP
-    const clientIP = request.headers.get('x-forwarded-for') || 
-                    request.headers.get('x-real-ip') || 
-                    'unknown';
-
-    // Validate API key
-    const apiKeyHeader = request.headers.get('x-api-key');
-    if (!apiKeyHeader) {
-      return new HttpResponse({
-        status: 401,
-        jsonBody: { error: 'API key required', requestId }
-      });
+    if (!authResult.success) {
+      return authResult.response; // Returns 401/429 with proper error handling
     }
 
-    const { apiKey, isValid, error } = await apiKeyService.validateApiKey(
-      apiKeyHeader,
-      clientIP,
-      ['demographics:write']
-    );
+    // extract authenticated data
+    const { request: originalRequest, auth, requestId } = authResult.data;
 
-    if (!isValid) {
-      return new HttpResponse({
-        status: 401,
-        jsonBody: { error: error || 'Invalid API key', requestId }
-      });
-    }
+    logger.info('Demographics submission started', { 
+      requestId,
+      lawFirm: auth.lawFirm,
+      keyId: auth.keyId
+    });
 
-    // Check rate limits
-    const rateLimitResult = await rateLimiter.checkRateLimit(apiKey, clientIP);
-    if (!rateLimitResult.allowed) {
-      return new HttpResponse({
-        status: 429,
-        headers: {
-          'X-RateLimit-Limit': rateLimitResult.limit.toString(),
-          'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
-          'X-RateLimit-Reset': rateLimitResult.resetTime.toISOString(),
-          'X-RateLimit-Window': rateLimitResult.windowType,
-        },
-        jsonBody: { 
-          error: 'Rate limit exceeded', 
-          resetTime: rateLimitResult.resetTime.toISOString(),
-          requestId 
-        }
-      });
-    }
-
-    // Parse and validate request body
-    const body = await request.json();
+    // business Logic
+    const body = await originalRequest.json();
     const validation = CreateDemographicsRequestSchema.safeParse(body);
     
     if (!validation.success) {
-      return new HttpResponse({
+      return addRateLimitHeaders(new HttpResponse({
         status: 400,
         jsonBody: { 
           error: 'Validation failed', 
           details: validation.error.issues,
-          requestId 
+          requestId
         }
-      });
+      }), context);
     }
 
     const demographicsData = validation.data;
     const now = new Date().toISOString();
 
-    // Create demographics record
+    // Create demographics record using authenticated context
     const demographics: Demographics = {
       id: uuidv4(),
-      partitionKey: apiKey.law_firm,
+      partitionKey: auth.lawFirm,         // from authenticated user
       ...demographicsData,
       created_at: now,
       updated_at: now,
-      created_by: apiKey.created_by,
+      created_by: auth.apiKey.created_by,  // from authenticated user
     };
 
     // Save to database
@@ -111,52 +68,53 @@ async function submitDemographics(request: HttpRequest, context: InvocationConte
         created_at: demographics.created_at,
       },
       metadata: {
-        apiKeyId: apiKey.key_id,
+        apiKeyId: auth.keyId,
         requestId,
       }
     });
 
     const processingTime = Date.now() - startTime;
     logger.info('Demographics submission completed', { 
-      requestId, 
+      requestId,
       demographicsId: demographics.id,
       lawFirm: demographics.law_firm,
       processingTime 
     });
 
-    return new HttpResponse({
+    // Rate limit headers automatically added
+    return addRateLimitHeaders(new HttpResponse({
       status: 201,
-      headers: {
-        'X-RateLimit-Limit': rateLimitResult.limit.toString(),
-        'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
-        'X-RateLimit-Reset': rateLimitResult.resetTime.toISOString(),
-      },
       jsonBody: {
         id: demographics.id,
         message: 'Demographics submitted successfully',
         requestId,
         processingTime
       }
-    });
+    }), context);
 
   } catch (error) {
     const processingTime = Date.now() - startTime;
-    logger.error('Error submitting demographics', { requestId, error, processingTime });
+    logger.error('Error submitting demographics', { 
+      error: error instanceof Error ? error.message : String(error),
+      processingTime 
+    });
     
     return new HttpResponse({
       status: 500,
       jsonBody: { 
         error: 'Internal server error', 
-        requestId,
         processingTime
       }
     });
   }
 }
 
+// Register the function
 app.http('submitDemographics', {
   methods: ['POST'],
   authLevel: 'anonymous',
   route: 'demographics',
   handler: submitDemographics
 });
+
+export { submitDemographics };
