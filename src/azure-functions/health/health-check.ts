@@ -2,6 +2,7 @@ import { app, HttpRequest, HttpResponse, InvocationContext } from '@azure/functi
 import { databaseService } from '../../shared/database/database.service';
 import { queueService } from '../../shared/services/queue.service';
 import { rateLimiter } from '../../shared/services/rateLimiter.service';
+import { authMiddleware } from '../../shared/middleware/auth.middleware';
 import { logger } from '../monitor/winstonLogger';
 
 interface HealthCheckResult {
@@ -16,13 +17,29 @@ async function healthCheck(request: HttpRequest, context: InvocationContext): Pr
   const startTime = Date.now();
   const checks: HealthCheckResult[] = [];
   let overallStatus: 'healthy' | 'unhealthy' | 'degraded' = 'healthy';
+  let isAuthenticated = false;
+  let authInfo = null;
 
   try {
+    // Try to authenticate (optional for health check)
+    const authResult = await authMiddleware(request, context, {
+      allowAnonymous: true  // Allow both authenticated and anonymous access
+    });
+
+    if (authResult.success && authResult.data.auth) {
+      isAuthenticated = true;
+      authInfo = {
+        lawFirm: authResult.data.auth.lawFirm,
+        keyId: authResult.data.auth.keyId
+      };
+      logger.info('Authenticated health check', authInfo);
+    }
+
     // Database health check
     const dbCheck = await checkDatabase();
     checks.push(dbCheck);
 
-    // Queue service health check
+    // Queue service health check  
     const queueCheck = await checkQueueService();
     checks.push(queueCheck);
 
@@ -53,6 +70,8 @@ async function healthCheck(request: HttpRequest, context: InvocationContext): Pr
       environment: process.env.ENVIRONMENT || 'unknown',
       uptime: process.uptime(),
       responseTime: totalTime,
+      authenticated: isAuthenticated,
+      authInfo: isAuthenticated ? authInfo : undefined,
       checks: checks.reduce((acc, check) => {
         acc[check.service] = {
           status: check.status,
@@ -87,11 +106,13 @@ async function healthCheck(request: HttpRequest, context: InvocationContext): Pr
         status: 'unhealthy',
         timestamp: new Date().toISOString(),
         error: 'Health check system failure',
-        responseTime: Date.now() - startTime
+        responseTime: Date.now() - startTime,
+        authenticated: false
       }
     });
   }
 }
+
 
 async function checkDatabase(): Promise<HealthCheckResult> {
   const startTime = Date.now();

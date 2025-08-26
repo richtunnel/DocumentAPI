@@ -1,117 +1,82 @@
 import { app, HttpRequest, HttpResponse, InvocationContext } from '@azure/functions';
-import { v4 as uuidv4 } from 'uuid';
 import { databaseService } from '../../shared/database/database.service';
-import { apiKeyService } from '../../shared/services/apiKey.service';
-import { rateLimiter } from '../../shared/services/rateLimiter.service';
+import { authMiddleware, addRateLimitHeaders } from '../../shared/middleware/auth.middleware';
 import { logger } from '../monitor/winstonLogger';
 
-
 async function getDemographicById(request: HttpRequest, context: InvocationContext): Promise<HttpResponse> {
-  const requestId = uuidv4();
   const startTime = Date.now();
   
   try {
-    logger.info('Get demographic by ID started', { requestId });
+    // Use authMiddleware for authentication and rate limiting
+    const authResult = await authMiddleware(request, context, {
+      requiredScopes: ['demographics:read']
+    });
 
-    // Get client IP
-    const clientIP = request.headers.get('x-forwarded-for') || 
-                    request.headers.get('x-real-ip') || 
-                    'unknown';
-
-    // Validate API key
-    const apiKeyHeader = request.headers.get('x-api-key');
-    if (!apiKeyHeader) {
-      return new HttpResponse({
-        status: 401,
-        jsonBody: { error: 'API key required', requestId }
-      });
+    if (!authResult.success) {
+      return authResult.response;
     }
 
-    const { apiKey, isValid, error } = await apiKeyService.validateApiKey(
-      apiKeyHeader,
-      clientIP,
-      ['demographics:read']
-    );
+    const { auth, requestId } = authResult.data;
 
-    if (!isValid) {
-      return new HttpResponse({
-        status: 401,
-        jsonBody: { error: error || 'Invalid API key', requestId }
-      });
-    }
-
-    // Check rate limits
-    const rateLimitResult = await rateLimiter.checkRateLimit(apiKey, clientIP);
-    if (!rateLimitResult.allowed) {
-      return new HttpResponse({
-        status: 429,
-        headers: {
-          'X-RateLimit-Limit': rateLimitResult.limit.toString(),
-          'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
-          'X-RateLimit-Reset': rateLimitResult.resetTime.toISOString(),
-          'X-RateLimit-Window': rateLimitResult.windowType,
-        },
-        jsonBody: { 
-          error: 'Rate limit exceeded', 
-          resetTime: rateLimitResult.resetTime.toISOString(),
-          requestId 
-        }
-      });
-    }
+    logger.info('Get demographic by ID started', { 
+      requestId,
+      lawFirm: auth.lawFirm,
+      keyId: auth.keyId 
+    });
 
     // Get demographic ID from route parameters
     const demographicId = request.params.id;
     if (!demographicId) {
-      return new HttpResponse({
+      return addRateLimitHeaders(new HttpResponse({
         status: 400,
-        jsonBody: { error: 'Demographic ID required', requestId }
-      });
+        jsonBody: { 
+          error: 'Demographic ID required', 
+          requestId 
+        }
+      }), context);
     }
 
-    // Retrieve specific demographic
+    // Retrieve specific demographic for the authenticated law firm
     const demographic = await databaseService.getDemographicById(
       demographicId,
-      apiKey.law_firm
+      auth.lawFirm
     );
 
     if (!demographic) {
-      return new HttpResponse({
+      return addRateLimitHeaders(new HttpResponse({
         status: 404,
-        jsonBody: { error: 'Demographic not found', requestId }
-      });
+        jsonBody: { 
+          error: 'Demographic not found', 
+          requestId 
+        }
+      }), context);
     }
 
     const processingTime = Date.now() - startTime;
     logger.info('Get demographic by ID completed', { 
       requestId, 
       demographicId,
-      lawFirm: apiKey.law_firm,
+      lawFirm: auth.lawFirm,
       processingTime 
     });
 
-    return new HttpResponse({
+    return addRateLimitHeaders(new HttpResponse({
       status: 200,
-      headers: {
-        'X-RateLimit-Limit': rateLimitResult.limit.toString(),
-        'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
-        'X-RateLimit-Reset': rateLimitResult.resetTime.toISOString(),
-      },
       jsonBody: {
         data: demographic,
         requestId,
         processingTime
       }
-    });
+    }), context);
 
   } catch (error) {
     const processingTime = Date.now() - startTime;
-    logger.error('Error getting demographic by ID', { requestId, error, processingTime });
+    logger.error('Error getting demographic by ID', { error, processingTime });
     
     return new HttpResponse({
       status: 500,
       jsonBody: { 
         error: 'Internal server error', 
-        requestId,
         processingTime
       }
     });
@@ -124,3 +89,5 @@ app.http('getDemographicById', {
   route: 'demographics/{id}',
   handler: getDemographicById
 });
+
+export { getDemographicById };

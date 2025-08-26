@@ -1,19 +1,46 @@
 import { app, InvocationContext } from '@azure/functions';
 import { logger } from '../monitor/winstonLogger';
+import { promisify } from 'util';
+import * as zlib from 'zlib';
+import * as os from 'os';
+
+interface MessagePayload {
+    type: 'webhook' | 'email' | 'sms';
+    id: string;
+    retry_count: number;
+    payload: {
+        documentUrl?: string;
+        webhook_url?: string;
+        event: string;
+        to?: string;
+        subject?: string;
+        phone?: string;
+        text?: string;
+    }
+}
+
+const gzip = promisify(zlib.gzip);
+const gunzip = promisify(zlib.gunzip);
+const availableMemory = os.freemem() / 1024 / 1024; // MB
+const estimatedDocumentSize = 10;
 
 async function processBatchMessages(message: unknown, context: InvocationContext): Promise<void> {
   const startTime = Date.now();
+
   
   // Cast message to array since we know it's an array when cardinality is 'many'
-  const messages = message as unknown[];
+  const messages = message as MessagePayload[];
   
   logger.info('Processing message batch', { 
     batchSize: messages.length,
     executionId: context.invocationId 
   });
 
-  // Process messages in parallel with concurrency control
-  const concurrencyLimit = 8;
+
+// Process messages in parallel with concurrency control
+
+ /* Add a dynamic concurrencyLimit here */
+ const concurrencyLimit = Math.min(8, Math.floor(availableMemory / estimatedDocumentSize));
   const batches = [];
   
   for (let i = 0; i < messages.length; i += concurrencyLimit) {
@@ -49,7 +76,7 @@ async function processBatchMessages(message: unknown, context: InvocationContext
 }
 
 // Unique function name for batch processor
-async function processBatchMessage(messageBody: any, context: InvocationContext): Promise<void> {
+async function processBatchMessage(messageBody: MessagePayload, context: InvocationContext): Promise<void> {
   const { type, payload, id, retry_count } = messageBody;
   const messageId = String(context.triggerMetadata?.messageId || id || context.invocationId);
   const deliveryCount = Number(context.triggerMetadata?.deliveryCount || 1);
@@ -82,6 +109,39 @@ async function processBatchWebhookMessage(payload: any, messageId: string): Prom
   if (!webhookUrl) {
     throw new Error('Webhook URL not provided');
   }
+
+ // #edit, add later to fetch and compress docs
+
+//   let documentContent: Buffer | null = null;
+//   if (payload.documentUrl) {
+//     try {
+//       // Fetch document from Azure Blob Storage
+//       const blobServiceClient = BlobServiceClient.fromConnectionString(
+//         process.env.AZURE_STORAGE_CONNECTION_STRING || ''
+//       );
+//       const containerClient = blobServiceClient.getContainerClient('documents');
+//       const blobName = payload.documentUrl.split('/').pop();
+//       if (!blobName) {
+//         throw new Error('Invalid document URL');
+//       }
+//       const blobClient = containerClient.getBlobClient(blobName);
+//       const download = await blobClient.download();
+//       documentContent = await streamToBuffer(download.readableStreamBody!);
+
+//       // Decompress document
+//       documentContent = await gunzip(documentContent);
+//       logger.info('Document decompressed', { messageId, size: documentContent.length });
+//     } catch (error) {
+//       logger.error('Failed to fetch or decompress document', { messageId, error });
+//       throw error;
+//     }
+//   }
+
+  logger.info('Delivering batch webhook', {
+    messageId,
+    webhookUrl,
+    eventType: payload.event,
+  });
 
   logger.info('Delivering batch webhook', { 
     messageId, 
@@ -137,7 +197,21 @@ async function generateBatchWebhookSignature(payload: any): Promise<string> {
     .digest('hex');
 }
 
-// Fixed: Proper batch trigger with cardinality
+// Helper to convert stream to buffer #edit, add later
+async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+// Compress document for sending to Service Bus, #edit, add later
+async function compressDocument(content: Buffer): Promise<Buffer> {
+  return await gzip(content) || content ;
+}
+
+// Proper batch trigger with cardinality
 app.serviceBusQueue('processBatchMessages', {
   connection: 'SERVICE_BUS_CONNECTION_STRING',
   queueName: 'demographics-batch-processing',

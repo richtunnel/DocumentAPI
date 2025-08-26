@@ -134,6 +134,15 @@ class RateLimiter {
     };
   }
 
+  // #edit, add later
+  async addDocumentToFifo(lawFirm: string, correlationId: string): Promise<void> {
+  const redis = new Redis(process.env.REDIS_CONNECTION_STRING!);
+  const key = `session:${lawFirm}:documents`;
+  await redis.lpush(key, `document:${correlationId}`);
+  await redis.expire(key, 24 * 60 * 60); // 24 hours
+  await redis.quit();
+}
+
   private memoryBasedRateLimit(apiKey: ApiKey): RateLimitResult {
     // Simple fallback - in production, consider using a more sophisticated solution
     logger.warn('Using memory-based rate limiting - not recommended for production');

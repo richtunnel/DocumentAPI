@@ -1,8 +1,6 @@
 import { app, HttpRequest, HttpResponse, InvocationContext } from '@azure/functions';
-import { v4 as uuidv4 } from 'uuid';
 import { blobSasService } from '../../shared/services/blobSas.service';
-import { apiKeyService } from '../../shared/services/apiKey.service';
-import { rateLimiter } from '../../shared/services/rateLimiter.service';
+import { authMiddleware, addRateLimitHeaders } from '../../shared/middleware/auth.middleware';
 import { z } from 'zod';
 import { logger } from '../monitor/winstonLogger';
 
@@ -15,70 +13,39 @@ const GenerateUploadUrlSchema = z.object({
 });
 
 async function generateUploadUrl(request: HttpRequest, context: InvocationContext): Promise<HttpResponse> {
-  const requestId = uuidv4();
   const startTime = Date.now();
 
   try {
-    logger.info('Generate upload URL started', { requestId });
+    // Use authMiddleware for authentication and rate limiting
+    const authResult = await authMiddleware(request, context, {
+      requiredScopes: ['files:upload', 'demographics:write']
+    });
 
-    // Get client IP
-    const clientIP = request.headers.get('x-forwarded-for') || 
-                    request.headers.get('x-real-ip') || 
-                    'unknown';
-
-    // Validate API key
-    const apiKeyHeader = request.headers.get('x-api-key');
-    if (!apiKeyHeader) {
-      return new HttpResponse({
-        status: 401,
-        jsonBody: { error: 'API key required', requestId }
-      });
+    if (!authResult.success) {
+      return authResult.response;
     }
 
-    const { apiKey, isValid, error } = await apiKeyService.validateApiKey(
-      apiKeyHeader,
-      clientIP,
-      ['files:upload', 'demographics:write']
-    );
+    const { auth, requestId } = authResult.data;
 
-    if (!isValid) {
-      return new HttpResponse({
-        status: 401,
-        jsonBody: { error: error || 'Invalid API key', requestId }
-      });
-    }
-
-    // Check rate limits
-    const rateLimitResult = await rateLimiter.checkRateLimit(apiKey, clientIP);
-    if (!rateLimitResult.allowed) {
-      return new HttpResponse({
-        status: 429,
-        headers: {
-          'X-RateLimit-Limit': rateLimitResult.limit.toString(),
-          'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
-          'X-RateLimit-Reset': rateLimitResult.resetTime.toISOString(),
-        },
-        jsonBody: { 
-          error: 'Rate limit exceeded', 
-          resetTime: rateLimitResult.resetTime.toISOString(),
-          requestId 
-        }
-      });
-    }
+    logger.info('Generate upload URL started', { 
+      requestId,
+      lawFirm: auth.lawFirm,
+      keyId: auth.keyId 
+    });
 
     // Parse and validate request
     const body = await request.json();
     const validation = GenerateUploadUrlSchema.safeParse(body);
     
     if (!validation.success) {
-      return new HttpResponse({
+      return addRateLimitHeaders(new HttpResponse({
         status: 400,
         jsonBody: { 
           error: 'Validation failed', 
           details: validation.error.issues,
           requestId 
         }
-      });
+      }), context);
     }
 
     const uploadRequest = validation.data;
@@ -87,7 +54,7 @@ async function generateUploadUrl(request: HttpRequest, context: InvocationContex
     const sasResponse = await blobSasService.generateUploadSasUrl({
       fileName: uploadRequest.fileName,
       contentType: uploadRequest.contentType,
-      lawFirm: apiKey.law_firm,
+      lawFirm: auth.lawFirm,
       demographicsId: uploadRequest.demographicsId,
       documentType: uploadRequest.documentType,
       maxFileSizeMB: uploadRequest.maxFileSizeMB
@@ -97,19 +64,14 @@ async function generateUploadUrl(request: HttpRequest, context: InvocationContex
     
     logger.info('Upload URL generated successfully', {
       requestId,
-      lawFirm: apiKey.law_firm,
+      lawFirm: auth.lawFirm,
       fileName: uploadRequest.fileName,
       correlationId: sasResponse.correlationId,
       processingTime
     });
 
-    return new HttpResponse({
+    return addRateLimitHeaders(new HttpResponse({
       status: 200,
-      headers: {
-        'X-RateLimit-Limit': rateLimitResult.limit.toString(),
-        'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
-        'X-RateLimit-Reset': rateLimitResult.resetTime.toISOString(),
-      },
       jsonBody: {
         uploadUrl: sasResponse.uploadUrl,
         blobName: sasResponse.blobName,
@@ -126,24 +88,22 @@ async function generateUploadUrl(request: HttpRequest, context: InvocationContex
         requestId,
         processingTime
       }
-    });
+    }), context);
 
   } catch (error) {
     const processingTime = Date.now() - startTime;
-    logger.error('Error generating upload URL', { requestId, error, processingTime });
+    logger.error('Error generating upload URL', { error, processingTime });
     
     return new HttpResponse({
       status: 500,
       jsonBody: { 
         error: 'Internal server error', 
-        requestId,
         processingTime
       }
     });
   }
 }
 
-// Register the function
 app.http('generateUploadUrl', {
   methods: ['POST'],
   authLevel: 'anonymous',
@@ -151,5 +111,4 @@ app.http('generateUploadUrl', {
   handler: generateUploadUrl
 });
 
-
-
+export { generateUploadUrl };

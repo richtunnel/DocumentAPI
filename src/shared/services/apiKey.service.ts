@@ -3,18 +3,9 @@ import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { ApiKey, CreateApiKeyRequest } from '../types/apiKey';
 import { databaseService } from '../database/database.service';
-import winston from 'winston';
+import { logger } from '../../azure-functions/monitor/winstonLogger';
 
-const logger = winston.createLogger({
-  level: 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [
-    new winston.transports.Console()
-  ]
-});
+
 
 class ApiKeyService {
   private readonly encryptionKey: string;

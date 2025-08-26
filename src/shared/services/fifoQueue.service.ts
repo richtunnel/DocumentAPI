@@ -1,3 +1,4 @@
+//Queue processing
 import { ServiceBusClient, ServiceBusMessage, ServiceBusSender, ServiceBusReceiver, ServiceBusAdministrationClient } from '@azure/service-bus';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../../azure-functions/monitor/winstonLogger';
@@ -54,7 +55,7 @@ class FifoQueueService {
       const serviceBusMessage: ServiceBusMessage = {
         messageId: fifoMessage.id,
         body: fifoMessage,
-        sessionId: fifoMessage.sessionId, // Critical for FIFO ordering
+        sessionId: fifoMessage.sessionId, // critical for FIFO ordering
         correlationId: fifoMessage.correlation_id,
         contentType: 'application/json',
         subject: fifoMessage.type,
@@ -228,7 +229,7 @@ class FifoQueueService {
       scheduledMessages: 0 
     };
     
-    // TODO: Uncomment when SDK version is confirmed
+    // #edits: uncomment when SDK version is confirmed
     /*
     try {
       const queueName = this.queueNames[queueType];
@@ -247,7 +248,7 @@ class FifoQueueService {
   }
 
   /**
-   * Process messages from session-enabled queue (FIFO)
+   * process messages from session-enabled queue (FIFO)
    */
   async createSessionReceiver(
     queueType: 'demographics' | 'webhooks',

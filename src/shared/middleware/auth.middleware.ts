@@ -4,7 +4,7 @@ import { apiKeyService } from '../services/apiKey.service';
 import { rateLimiter } from '../services/rateLimiter.service';
 import { logger } from '../../azure-functions/monitor/winstonLogger';
 
-// ✅ TypeScript interfaces that don't conflict with Azure Functions
+// TypeScript interfaces that don't conflict with Azure Functions
 export interface AuthContext {
   apiKey: any;
   lawFirm: string;
@@ -198,12 +198,16 @@ export function addRateLimitHeaders(response: HttpResponse, context: InvocationC
     const headers = { ...response.headers };
     Object.assign(headers, rateLimitHeaders);
     
-    return new HttpResponse({
-      status: response.status,
-      headers,
-      jsonBody: response.jsonBody,
-      body: response.body
-    });
+return new HttpResponse({
+  status: 201,
+  body: JSON.stringify({
+    message: 'Success', 
+    data: response
+  }),
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
   }
 
   return response;

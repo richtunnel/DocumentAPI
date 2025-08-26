@@ -1,27 +1,36 @@
 #!/bin/bash
 
 # Azure Demographics API Setup Script
-
 set -e
 
 # Configuration
 RESOURCE_GROUP="partner-api"
 LOCATION="eastus"
-SERVICE_BUS_NAMESPACE="bus-to-demographics-$(date +%s)"
-STORAGE_ACCOUNT="stdemographics$(date +%s)"
-SQL_SERVER_NAME="sql-demographics-$(date +%s)"
-SQL_DATABASE_NAME="DemographicsDB"
-SQL_ADMIN_USER="sqladmin"
-SQL_ADMIN_PASSWORD="Demographics123!"
+SUBSCRIPTION_ID=$(az account show --query id -o tsv)
 
-echo "Creating Azure resources for Demographics API with SQL Server..."
+# Resource naming
+SERVICE_BUS_NAMESPACE="bus-demographics-$(date +%s)"
+STORAGE_ACCOUNT="stdemographics$(date +%s)" #edit
+SQL_SERVER_NAME="ms-partner-server-$(date +%s)" #edit
+SQL_DATABASE_NAME="MilestonePartnerDB"
+REDIS_NAME="redis-demographics-$(date +%s)"
+FUNCTION_APP_NAME="func-demographics-$(date +%s)"
+APP_SERVICE_PLAN="plan-demographics-$(date +%s)"
+APIM_NAME="apim-demographics-$(date +%s)"
+CONTAINER_REGISTRY="acrdemographics$(date +%s)"
+CONTAINER_APP_ENV="env-demographics-$(date +%s)"
+
+echo "Starting Complete Azure Demographics API Deployment"
+echo "Resource Group: $RESOURCE_GROUP"
+echo "Location: $LOCATION"
+echo ""
 
 # Create Resource Group
-echo "Creating resource group: $RESOURCE_GROUP"
+echo "Creating resource group..."
 az group create --name $RESOURCE_GROUP --location $LOCATION
 
-# Create Service Bus Namespace (Premium tier for FIFO and better batching)
-echo "Creating Service Bus namespace: $SERVICE_BUS_NAMESPACE"
+# 1. CREATE SERVICE BUS WITH FIFO QUEUES
+echo "Creating Service Bus with FIFO queues..."
 az servicebus namespace create \
   --resource-group $RESOURCE_GROUP \
   --name $SERVICE_BUS_NAMESPACE \
@@ -29,91 +38,71 @@ az servicebus namespace create \
   --sku Premium \
   --capacity 1
 
-echo "Creating Service Bus queues with FIFO and batching..."
+# Create FIFO queues
+declare -a queues=(
+  "demographics-processing-fifo:true:PT5M:3:5120"
+  "webhook-notifications-fifo:true:PT2M:5:1024" 
+  "document-processing:false:PT5M:3:2048"
+  "dead-letter-processing:false:PT10M:1:1024"
+)
 
-# Create FIFO Queue for Demographics Processing (Sessions enabled for FIFO)
-az servicebus queue create \
-  --resource-group $RESOURCE_GROUP \
-  --namespace-name $SERVICE_BUS_NAMESPACE \
-  --name demographics-processing-fifo \
-  --max-delivery-count 3 \
-  --lock-duration PT5M \
-  --requires-session true \
-  --duplicate-detection-history-time-window PT10M \
-  --enable-duplicate-detection true \
-  --max-size-in-megabytes 5120 \
-  --enable-batched-operations true
+for queue_info in "${queues[@]}"; do
+  IFS=':' read -r queue_name requires_session lock_duration max_delivery max_size <<< "$queue_info"
+  
+  echo "...Creating queue: $queue_name"
+  
+  cmd="az servicebus queue create \
+    --resource-group $RESOURCE_GROUP \
+    --namespace-name $SERVICE_BUS_NAMESPACE \
+    --name $queue_name \
+    --max-delivery-count $max_delivery \
+    --lock-duration $lock_duration \
+    --max-size-in-megabytes $max_size \
+    --enable-batched-operations true"
+  
+  if [ "$requires_session" = "true" ]; then
+    cmd="$cmd --requires-session true --duplicate-detection-history-time-window PT10M --enable-duplicate-detection true"
+  else
+    cmd="$cmd --enable-partitioning true"
+  fi
+  
+  eval $cmd
+done
 
-# Create FIFO Queue for Webhook Notifications
-az servicebus queue create \
-  --resource-group $RESOURCE_GROUP \
-  --namespace-name $SERVICE_BUS_NAMESPACE \
-  --name webhook-notifications-fifo \
-  --max-delivery-count 5 \
-  --lock-duration PT2M \
-  --requires-session true \
-  --duplicate-detection-history-time-window PT1H \
-  --enable-duplicate-detection true \
-  --max-size-in-megabytes 1024 \
-  --enable-batched-operations true
-
-# Create Standard Queue for Document Processing (High throughput, non-FIFO)
-az servicebus queue create \
-  --resource-group $RESOURCE_GROUP \
-  --namespace-name $SERVICE_BUS_NAMESPACE \
-  --name document-processing \
-  --max-delivery-count 3 \
-  --lock-duration PT5M \
-  --max-size-in-megabytes 2048 \
-  --enable-batched-operations true \
-  --enable-partitioning true
-
-# Create Dead Letter Queue for failed messages
-az servicebus queue create \
-  --resource-group $RESOURCE_GROUP \
-  --namespace-name $SERVICE_BUS_NAMESPACE \
-  --name dead-letter-processing \
-  --max-delivery-count 1 \
-  --lock-duration PT10M \
-  --max-size-in-megabytes 1024 \
-  --enable-batched-operations true
-
-echo "FIFO Service Bus queues created successfully!"
-
-# Create Storage Account and Container
-echo "Creating storage account: $STORAGE_ACCOUNT"
+# 2. CREATE STORAGE ACCOUNT WITH CONTAINERS
+echo "Creating Storage Account..."
 az storage account create \
   --name $STORAGE_ACCOUNT \
   --resource-group $RESOURCE_GROUP \
   --location $LOCATION \
   --sku Standard_LRS \
-  --kind StorageV2
+  --kind StorageV2 \
+  --access-tier Hot
 
-echo "Creating blob container..."
-az storage container create \
-  --name demographics-documents \
-  --account-name $STORAGE_ACCOUNT \
-  --auth-mode login
+# Create containers
+echo " Creating blob containers..."
+az storage container create --name demographics-documents --account-name $STORAGE_ACCOUNT --auth-mode login
+az storage container create --name function-releases --account-name $STORAGE_ACCOUNT --auth-mode login --public-access off
 
-# Create SQL Server and Database
-echo "Creating SQL Server: $SQL_SERVER_NAME"
+# 3. CREATE AZURE SQL SERVER AND DATABASE
+echo "Creating SQL Server and Database..."
+SQL_ADMIN_PASSWORD="Demographics$(date +%s)!"
+
 az sql server create \
   --resource-group $RESOURCE_GROUP \
   --name $SQL_SERVER_NAME \
   --location $LOCATION \
-  --admin-user $SQL_ADMIN_USER \
+  --admin-user sqladmin \
   --admin-password "$SQL_ADMIN_PASSWORD"
 
-echo "Creating SQL Database: $SQL_DATABASE_NAME"
 az sql db create \
   --resource-group $RESOURCE_GROUP \
   --server $SQL_SERVER_NAME \
   --name $SQL_DATABASE_NAME \
-  --service-objective Basic \
+  --service-objective S1 \
   --backup-storage-redundancy Local
 
-# Allow Azure services to access SQL Server
-echo "Configuring SQL Server firewall..."
+# Configure firewall
 az sql server firewall-rule create \
   --resource-group $RESOURCE_GROUP \
   --server $SQL_SERVER_NAME \
@@ -121,18 +110,68 @@ az sql server firewall-rule create \
   --start-ip-address 0.0.0.0 \
   --end-ip-address 0.0.0.0
 
-# Optional: Allow your current IP to access SQL Server for management
-CURRENT_IP=$(curl -s ifconfig.me)
-echo "Adding your current IP ($CURRENT_IP) to SQL Server firewall..."
-az sql server firewall-rule create \
+# 4. CREATE REDIS CACHE
+echo "🔄 Creating Redis Cache..."
+az redis create \
   --resource-group $RESOURCE_GROUP \
-  --server $SQL_SERVER_NAME \
-  --name "AllowCurrentIP" \
-  --start-ip-address $CURRENT_IP \
-  --end-ip-address $CURRENT_IP
+  --name $REDIS_NAME \
+  --location $LOCATION \
+  --sku Basic \
+  --vm-size c0 \
+  --enable-non-ssl-port
+
+# 5. CREATE CONTAINER REGISTRY (for container deployments)
+echo "🐳 Creating Container Registry..."
+az acr create \
+  --resource-group $RESOURCE_GROUP \
+  --name $CONTAINER_REGISTRY \
+  --sku Basic \
+  --admin-enabled true
+
+# 6. CREATE FUNCTION APP WITH CONSUMPTION PLAN
+echo "⚡ Creating Azure Function App..."
+az functionapp plan create \
+  --resource-group $RESOURCE_GROUP \
+  --name $APP_SERVICE_PLAN \
+  --location $LOCATION \
+  --number-of-workers 1 \
+  --sku EP1 \
+  --is-linux true
+
+# Create Function App
+az functionapp create \
+  --resource-group $RESOURCE_GROUP \
+  --plan $APP_SERVICE_PLAN \
+  --name $FUNCTION_APP_NAME \
+  --storage-account $STORAGE_ACCOUNT \
+  --runtime node \
+  --runtime-version 18 \
+  --os-type Linux \
+  --functions-version 4
+
+# 7. CREATE API MANAGEMENT
+echo "Creating API Management..."
+az apim create \
+  --resource-group $RESOURCE_GROUP \
+  --name $APIM_NAME \
+  --location $LOCATION \
+  --publisher-email admin@demographics-api.com \
+  --publisher-name "Demographics API Team" \
+  --sku-name Developer \
+  --sku-capacity 1 \
+  --no-wait
+
+# 8. CREATE CONTAINER APPS ENVIRONMENT (Alternative to Functions)
+echo "Creating Container Apps Environment..."
+az extension add --name containerapp --upgrade
+
+az containerapp env create \
+  --resource-group $RESOURCE_GROUP \
+  --name $CONTAINER_APP_ENV \
+  --location $LOCATION
 
 # Get connection strings
-echo "Getting connection strings..."
+echo "Retrieving connection strings..."
 
 SERVICE_BUS_CONNECTION=$(az servicebus namespace authorization-rule keys list \
   --resource-group $RESOURCE_GROUP \
@@ -145,48 +184,89 @@ STORAGE_CONNECTION=$(az storage account show-connection-string \
   --resource-group $RESOURCE_GROUP \
   --query connectionString -o tsv)
 
-# Build SQL Server connection string
-SQL_CONNECTION="Server=tcp:${SQL_SERVER_NAME}.database.windows.net,1433;Initial Catalog=${SQL_DATABASE_NAME};Persist Security Info=False;User ID=${SQL_ADMIN_USER};Password=${SQL_ADMIN_PASSWORD};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+REDIS_CONNECTION=$(az redis list-keys \
+  --resource-group $RESOURCE_GROUP \
+  --name $REDIS_NAME \
+  --query primaryConnectionString -o tsv)
 
-# Output environment variables
+SQL_CONNECTION="Server=tcp:${SQL_SERVER_NAME}.database.windows.net,1433;Initial Catalog=${SQL_DATABASE_NAME};Persist Security Info=False;User ID=sqladmin;Password=${SQL_ADMIN_PASSWORD};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+
+# Configure Function App settings
+echo "Configuring Function App settings..."
+az functionapp config appsettings set \
+  --resource-group $RESOURCE_GROUP \
+  --name $FUNCTION_APP_NAME \
+  --settings \
+    "SERVICE_BUS_CONNECTION_STRING=$SERVICE_BUS_CONNECTION" \
+    "BLOB_STORAGE_CONNECTION_STRING=$STORAGE_CONNECTION" \
+    "REDIS_CONNECTION_STRING=$REDIS_CONNECTION" \
+    "DB_SERVER=${SQL_SERVER_NAME}.database.windows.net" \
+    "DB_DATABASE=$SQL_DATABASE_NAME" \
+    "DB_USER=sqladmin" \
+    "DB_PASSWORD=$SQL_ADMIN_PASSWORD" \
+    "DB_PORT=1433" \
+    "JWT_SECRET=$(openssl rand -base64 32)" \
+    "API_KEY_ENCRYPTION_KEY=$(openssl rand -base64 32)" \
+    "WEBHOOK_SECRET=$(openssl rand -base64 32)" \
+    "ENVIRONMENT=production"
+
+# Output deployment summary
 echo ""
-echo "========================================="
-echo "Azure Resources Created Successfully!"
-echo "========================================="
+echo "DEPLOYMENT COMPLETE!"
 echo ""
-echo "Add these to your local.settings.json and .env files:"
+echo "RESOURCE SUMMARY:"
+echo "  Resource Group: $RESOURCE_GROUP"
+echo "  Service Bus: $SERVICE_BUS_NAMESPACE"
+echo "  Storage: $STORAGE_ACCOUNT" 
+echo "  SQL Server: $SQL_SERVER_NAME"
+echo "  Redis: $REDIS_NAME"
+echo "  Function App: $FUNCTION_APP_NAME"
+echo "  APIM: $APIM_NAME (provisioning in background)"
+echo "  Container Registry: $CONTAINER_REGISTRY"
+echo "  Container Environment: $CONTAINER_APP_ENV"
 echo ""
-echo "SERVICE_BUS_CONNECTION_STRING=\"$SERVICE_BUS_CONNECTION\""
-echo "BLOB_STORAGE_CONNECTION_STRING=\"$STORAGE_CONNECTION\""
+echo "CONNECTION STRINGS:"
+echo "  Service Bus: $SERVICE_BUS_CONNECTION"
+echo "  Storage: $STORAGE_CONNECTION"
+echo "  Redis: $REDIS_CONNECTION"
+echo "  SQL: $SQL_CONNECTION"
 echo ""
-echo "SQL Server Configuration:"
-echo "DB_SERVER=\"${SQL_SERVER_NAME}.database.windows.net\""
-echo "DB_DATABASE=\"$SQL_DATABASE_NAME\""
-echo "DB_USER=\"$SQL_ADMIN_USER\""
-echo "DB_PASSWORD=\"$SQL_ADMIN_PASSWORD\""
-echo "DB_PORT=\"1433\""
+echo "NEXT STEPS:"
+echo "  1. Run database migration: ./scripts/run-migration.sh"
+echo "  2. Deploy function code: func azure functionapp publish $FUNCTION_APP_NAME"
+echo "  3. Configure APIM policies: az apim api import..."
+echo "  4. Deploy container apps (optional): az containerapp create..."
 echo ""
-echo "Or as a single connection string:"
-echo "SQL_CONNECTION_STRING=\"$SQL_CONNECTION\""
-echo ""
-echo "Resources Created:"
-echo "- Resource Group: $RESOURCE_GROUP"
-echo "- Service Bus Namespace: $SERVICE_BUS_NAMESPACE"
-echo "- Storage Account: $STORAGE_ACCOUNT"
-echo "- SQL Server: ${SQL_SERVER_NAME}.database.windows.net"
-echo "- SQL Database: $SQL_DATABASE_NAME"
-echo ""
-echo "Queues created:"
-echo "✓ demographics-processing-fifo (FIFO, Sessions enabled)"
-echo "✓ webhook-notifications-fifo (FIFO, Sessions enabled)" 
-echo "✓ document-processing (Partitioned, High throughput)"
-echo "✓ dead-letter-processing (Error handling)"
-echo ""
-echo "Next Steps:"
-echo "1. Run your database schema script on the SQL Server"
-echo "2. Deploy your Azure Functions"
-echo "3. Configure your application with the connection strings above"
-echo "4. Test the API endpoints"
-echo ""
-echo "To connect to SQL Server for schema setup:"
-echo "sqlcmd -S ${SQL_SERVER_NAME}.database.windows.net -d $SQL_DATABASE_NAME -U $SQL_ADMIN_USER -P \"$SQL_ADMIN_PASSWORD\" -i your-schema-file.sql"
+echo "Save these connection strings in your local.settings.json and production config!"
+
+# Save deployment info to file
+cat > deployment-info.json << EOF
+{
+  "deployment": {
+    "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+    "resourceGroup": "$RESOURCE_GROUP",
+    "location": "$LOCATION"
+  },
+  "resources": {
+    "serviceBus": "$SERVICE_BUS_NAMESPACE",
+    "storage": "$STORAGE_ACCOUNT",
+    "sqlServer": "$SQL_SERVER_NAME",
+    "redis": "$REDIS_NAME",
+    "functionApp": "$FUNCTION_APP_NAME",
+    "apim": "$APIM_NAME",
+    "containerRegistry": "$CONTAINER_REGISTRY",
+    "containerEnvironment": "$CONTAINER_APP_ENV"
+  },
+  "connectionStrings": {
+    "serviceBus": "$SERVICE_BUS_CONNECTION",
+    "storage": "$STORAGE_CONNECTION", 
+    "redis": "$REDIS_CONNECTION",
+    "sql": "$SQL_CONNECTION"
+  },
+  "credentials": {
+    "sqlPassword": "$SQL_ADMIN_PASSWORD"
+  }
+}
+EOF
+
+echo "Deployment info saved to: deployment-info.json"

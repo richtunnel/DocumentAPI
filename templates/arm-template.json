@@ -1,0 +1,218 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "apimName": {
+      "type": "string",
+      "defaultValue": "apim-demographics-api",
+      "metadata": {
+        "description": "Name of the API Management service"
+      }
+    },
+    "functionAppName": {
+      "type": "string",
+      "defaultValue": "func-demographics-api",
+      "metadata": {
+        "description": "Name of the Azure Function App"
+      }
+    },
+    "publisherEmail": {
+      "type": "string",
+      "defaultValue": "admin@demographics-api.com",
+      "metadata": {
+        "description": "Publisher email for API Management"
+      }
+    },
+    "publisherName": {
+      "type": "string",
+      "defaultValue": "Demographics API Team",
+      "metadata": {
+        "description": "Publisher name for API Management"
+      }
+    }
+  },
+  "variables": {
+    "apiName": "demographics-v1",
+    "apiPath": "demographics/v1",
+    "functionAppUrl": "[concat('https://', parameters('functionAppName'), '.azurewebsites.net')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.ApiManagement/service",
+      "apiVersion": "2021-12-01-preview",
+      "name": "[parameters('apimName')]",
+      "location": "[resourceGroup().location]",
+      "sku": {
+        "name": "Developer",
+        "capacity": 1
+      },
+      "properties": {
+        "publisherEmail": "[parameters('publisherEmail')]",
+        "publisherName": "[parameters('publisherName')]"
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis",
+      "apiVersion": "2021-12-01-preview",
+      "name": "[concat(parameters('apimName'), '/', variables('apiName'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service', parameters('apimName'))]"
+      ],
+      "properties": {
+        "displayName": "Demographics API v1",
+        "path": "[variables('apiPath')]",
+        "protocols": [
+          "https"
+        ],
+        "serviceUrl": "[concat(variables('functionAppUrl'), '/api')]",
+        "subscriptionRequired": true
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis/operations",
+      "apiVersion": "2021-12-01-preview",
+      "name": "[concat(parameters('apimName'), '/', variables('apiName'), '/upload-documents')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), variables('apiName'))]"
+      ],
+      "properties": {
+        "displayName": "Generate Document Upload URL",
+        "method": "POST",
+        "urlTemplate": "/documents/upload-url",
+        "description": "Generate SAS URL for direct document upload to blob storage",
+        "request": {
+          "headers": [
+            {
+              "name": "x-api-key",
+              "description": "API Key for authentication",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "representations": [
+            {
+              "contentType": "application/json",
+              "sample": "{\n  \"fileName\": \"document.pdf\",\n  \"contentType\": \"application/pdf\",\n  \"documentType\": \"demographics_form\",\n  \"demographicsId\": \"123e4567-e89b-12d3-a456-426614174000\"\n}"
+            }
+          ]
+        },
+        "responses": [
+          {
+            "statusCode": 200,
+            "description": "Upload URL generated successfully",
+            "representations": [
+              {
+                "contentType": "application/json",
+                "sample": "{\n  \"uploadUrl\": \"https://storage.blob.core.windows.net/...\",\n  \"blobName\": \"lawfirm/2024-01-15/uuid_document.pdf\",\n  \"correlationId\": \"123e4567-e89b-12d3-a456-426614174000\",\n  \"expiresAt\": \"2024-01-16T10:30:00Z\"\n}"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis/operations",
+      "apiVersion": "2021-12-01-preview",
+      "name": "[concat(parameters('apimName'), '/', variables('apiName'), '/submit-demographics')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), variables('apiName'))]"
+      ],
+      "properties": {
+        "displayName": "Submit Demographics",
+        "method": "POST",
+        "urlTemplate": "/demographics",
+        "description": "Submit demographics data for processing",
+        "request": {
+          "headers": [
+            {
+              "name": "x-api-key",
+              "description": "API Key for authentication",
+              "type": "string",
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis/operations",
+      "apiVersion": "2021-12-01-preview",
+      "name": "[concat(parameters('apimName'), '/', variables('apiName'), '/retrieve-demographics')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), variables('apiName'))]"
+      ],
+      "properties": {
+        "displayName": "Retrieve Demographics",
+        "method": "GET",
+        "urlTemplate": "/demographics",
+        "description": "Retrieve demographics data with filtering"
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis/operations",
+      "apiVersion": "2021-12-01-preview",
+      "name": "[concat(parameters('apimName'), '/', variables('apiName'), '/get-demographic-by-id')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), variables('apiName'))]"
+      ],
+      "properties": {
+        "displayName": "Get Demographics by ID",
+        "method": "GET",
+        "urlTemplate": "/demographics/{id}",
+        "description": "Get specific demographics record by ID",
+        "templateParameters": [
+          {
+            "name": "id",
+            "description": "Demographics record ID",
+            "type": "string",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis/operations",
+      "apiVersion": "2021-12-01-preview",
+      "name": "[concat(parameters('apimName'), '/', variables('apiName'), '/health-check')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), variables('apiName'))]"
+      ],
+      "properties": {
+        "displayName": "Health Check",
+        "method": "GET",
+        "urlTemplate": "/health",
+        "description": "API health check endpoint"
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis/policies",
+      "apiVersion": "2021-12-01-preview",
+      "name": "[concat(parameters('apimName'), '/', variables('apiName'), '/policy')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), variables('apiName'))]"
+      ],
+      "properties": {
+        "value": "<policies>\n  <inbound>\n    <!-- Rate limiting by IP address -->\n    <rate-limit-by-key calls=\"100\" renewal-period=\"60\" counter-key=\"@(context.Request.IpAddress)\" />\n    \n    <!-- API Key validation -->\n    <validate-parameters specified-parameter-action=\"prevent\">\n      <headers>\n        <parameter name=\"x-api-key\" action=\"required\" />\n      </headers>\n    </validate-parameters>\n    \n    <!-- CORS policy -->\n    <cors>\n      <allowed-origins>\n        <origin>https://client-portal.com</origin>\n        <origin>https://localhost:3000</origin>\n      </allowed-origins>\n      <allowed-methods>\n        <method>GET</method>\n        <method>POST</method>\n        <method>PUT</method>\n        <method>OPTIONS</method>\n      </allowed-methods>\n      <allowed-headers>\n        <header>*</header>\n      </allowed-headers>\n      <expose-headers>\n        <header>*</header>\n      </expose-headers>\n    </cors>\n    \n    <!-- Request size limiting (10MB) -->\n    <check-header name=\"Content-Length\" failed-check-httpcode=\"413\" failed-check-error-message=\"Request too large\" ignore-case=\"true\">\n      <value>10485760</value>\n    </check-header>\n    \n    <!-- Quota by API key -->\n    <quota-by-key calls=\"1000\" renewal-period=\"3600\" counter-key=\"@(context.Request.Headers.GetValueOrDefault(\\\"x-api-key\\\"))\" />\n    \n    <!-- Set backend URL -->\n    <set-backend-service base-url=\"@(context.Api.ServiceUrl)\" />\n    \n    <!-- Add correlation ID -->\n    <set-header name=\"x-correlation-id\" exists-action=\"skip\">\n      <value>@(Guid.NewGuid().ToString())</value>\n    </set-header>\n  </inbound>\n  \n  <backend>\n    <forward-request />\n  </backend>\n  \n  <outbound>\n    <!-- Add response headers -->\n    <set-header name=\"x-api-version\" exists-action=\"override\">\n      <value>1.0</value>\n    </set-header>\n    <set-header name=\"x-powered-by\" exists-action=\"override\">\n      <value>Demographics API via APIM</value>\n    </set-header>\n    \n    <!-- Remove sensitive backend headers -->\n    <set-header name=\"Server\" exists-action=\"delete\" />\n  </outbound>\n  \n  <on-error>\n    <set-status code=\"500\" reason=\"Internal Server Error\" />\n    <set-header name=\"Content-Type\" exists-action=\"override\">\n      <value>application/json</value>\n    </set-header>\n    <set-body>{\"error\": \"Internal server error\", \"correlation_id\": \"@(context.RequestId)\"}</set-body>\n  </on-error>\n</policies>",
+        "format": "xml"
+      }
+    }
+  ],
+  "outputs": {
+    "apimServiceName": {
+      "type": "string",
+      "value": "[parameters('apimName')]"
+    },
+    "apimGatewayUrl": {
+      "type": "string",
+      "value": "[concat('https://', parameters('apimName'), '.azure-api.net')]"
+    },
+    "apimManagementUrl": {
+      "type": "string",
+      "value": "[concat('https://', parameters('apimName'), '.management.azure-api.net')]"
+    },
+    "apiPath": {
+      "type": "string",
+      "value": "[variables('apiPath')]"
+    }
+  }
+}

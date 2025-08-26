@@ -5,7 +5,7 @@ import { logger } from '../monitor/winstonLogger';
 
 async function processUploadedDocument(blob: unknown, context: InvocationContext): Promise<void> {
   const startTime = Date.now();
-  const executionId = context.invocationId;
+  const documentId = context.invocationId;
 
   try {
     // Extract blob information from trigger metadata
@@ -14,7 +14,7 @@ async function processUploadedDocument(blob: unknown, context: InvocationContext
     const containerName = 'demographics-documents';
 
     logger.info('Document uploaded - blob trigger activated', {
-      executionId,
+      documentId,
       blobName,
       blobUri,
       blobSize: context.triggerMetadata?.length
@@ -25,7 +25,7 @@ async function processUploadedDocument(blob: unknown, context: InvocationContext
 
     if (!validation.isValid) {
       logger.error('Document validation failed', {
-        executionId,
+        documentId,
         blobName,
         error: validation.error,
         fileSize: validation.fileSize
@@ -79,7 +79,7 @@ async function processUploadedDocument(blob: unknown, context: InvocationContext
     const processingTime = Date.now() - startTime;
     
     logger.info('Document processed successfully by blob trigger', {
-      executionId,
+      documentId,
       blobName,
       correlationId,
       lawFirm,
@@ -90,7 +90,7 @@ async function processUploadedDocument(blob: unknown, context: InvocationContext
   } catch (error) {
     const processingTime = Date.now() - startTime;
     logger.error('Error in blob trigger processing', {
-      executionId,
+      documentId,
       error,
       processingTime,
       blobName: context.triggerMetadata?.name

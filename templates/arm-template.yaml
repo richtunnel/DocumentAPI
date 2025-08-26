@@ -1,0 +1,110 @@
+apiVersion: '2021-12-01-preview'
+kind: template
+metadata:
+  name: demographics-api-setup
+
+parameters:
+  apimName: 
+    type: string
+    defaultValue: api-demographics-api
+  functionAppName:
+    type: string
+    defaultValue: func-demographics-api
+
+resources:
+  # API Management Instance
+  - type: Microsoft.ApiManagement/service
+    apiVersion: '2021-12-01-preview'
+    name: '[parameters(''apimName'')]'
+    location: '[resourceGroup().location]'
+    sku:
+      name: Developer
+      capacity: 1
+    properties:
+      publisherEmail: admin@demographics-api.com
+      publisherName: Demographics API Team
+
+  # API Definition
+  - type: Microsoft.ApiManagement/service/apis
+    apiVersion: '2021-12-01-preview'
+    name: '[concat(parameters(''apimName''), ''/demographics-v1'')]'
+    properties:
+      displayName: Demographics API v1
+      path: demographics/v1
+      protocols:
+        - https
+      serviceUrl: '[concat(''https://'', parameters(''functionAppName''), ''.azurewebsites.net/api'')]'
+      subscriptionRequired: true
+      
+  # API Operations
+  - type: Microsoft.ApiManagement/service/apis/operations
+    apiVersion: '2021-12-01-preview'
+    name: '[concat(parameters(''apimName''), ''/demographics-v1/upload-documents'')]'
+    properties:
+      displayName: Upload Documents
+      method: POST
+      urlTemplate: /documents/upload
+      
+  - type: Microsoft.ApiManagement/service/apis/operations
+    apiVersion: '2021-12-01-preview'
+    name: '[concat(parameters(''apimName''), ''/demographics-v1/submit-demographics'')]'
+    properties:
+      displayName: Submit Demographics
+      method: POST
+      urlTemplate: /demographics
+
+  # Global Policies
+  - type: Microsoft.ApiManagement/service/apis/policies
+    apiVersion: '2021-12-01-preview'
+    name: '[concat(parameters(''apimName''), ''/demographics-v1/policy'')]'
+    properties:
+      value: |
+        <policies>
+          <inbound>
+            <!-- Rate limiting -->
+            <rate-limit-by-key calls="100" renewal-period="60" counter-key="@(context.Request.IpAddress)" />
+            
+            <!-- API Key validation -->
+            <validate-parameters specified-parameter-action="prevent">
+              <headers>
+                <parameter name="x-api-key" action="required" />
+              </headers>
+            </validate-parameters>
+            
+            <!-- CORS -->
+            <cors>
+              <allowed-origins>
+                <origin>https://client-portal.com</origin>
+              </allowed-origins>
+              <allowed-methods>
+                <method>GET</method>
+                <method>POST</method>
+                <method>PUT</method>
+              </allowed-methods>
+              <allowed-headers>
+                <header>*</header>
+              </allowed-headers>
+            </cors>
+            
+            <!-- Request size limiting -->
+            <quota-by-key calls="1000" renewal-period="3600" counter-key="@(context.Request.Headers.GetValueOrDefault("x-api-key"))" />
+          </inbound>
+          
+          <backend>
+            <forward-request />
+          </backend>
+          
+          <outbound>
+            <!-- Add response headers -->
+            <set-header name="x-api-version" exists-action="override">
+              <value>1.0</value>
+            </set-header>
+          </outbound>
+          
+          <on-error>
+            <return-response>
+              <set-status code="500" reason="Internal Server Error" />
+              <set-body>{"error": "Internal server error"}</set-body>
+            </return-response>
+          </on-error>
+        </policies>
