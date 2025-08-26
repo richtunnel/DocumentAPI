@@ -2,20 +2,11 @@ import { app, HttpRequest, HttpResponse, InvocationContext } from '@azure/functi
 import { v4 as uuidv4 } from 'uuid';
 import { CreateApiKeyRequestSchema } from '../../shared/types/apiKey';
 import { apiKeyService } from '../../shared/services/apiKey.service';
-import winston from 'winston';
 import jwt from 'jsonwebtoken';
 import {z} from "zod";
+import { logger } from '../monitor/winstonLogger';
 
-const logger = winston.createLogger({
-  level: 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [
-    new winston.transports.Console()
-  ]
-});
+
 
 // Interface for authenticated user info
 interface AuthenticatedUser {

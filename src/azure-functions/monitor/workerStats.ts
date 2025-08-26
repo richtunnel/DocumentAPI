@@ -17,6 +17,7 @@ const workerStatsInterface = {
   }
 };
 
+//Needs changing
 async function workerStats(request: HttpRequest): Promise<HttpResponse> {
   return new HttpResponse({
     jsonBody: {

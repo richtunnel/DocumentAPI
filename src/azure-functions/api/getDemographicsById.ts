@@ -3,18 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { databaseService } from '../../shared/database/database.service';
 import { apiKeyService } from '../../shared/services/apiKey.service';
 import { rateLimiter } from '../../shared/services/rateLimiter.service';
-import winston from 'winston';
+import { logger } from '../monitor/winstonLogger';
 
-const logger = winston.createLogger({
-  level: 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [
-    new winston.transports.Console()
-  ]
-});
 
 async function getDemographicById(request: HttpRequest, context: InvocationContext): Promise<HttpResponse> {
   const requestId = uuidv4();
