@@ -6,7 +6,7 @@ import { AuthenticatedRequest } from '../shared/types/express-extensions';
 const idempotencyService = new IdempotencyService();
 
 export function idempotencyMiddleware(ttlHours: number = 24) {
-  return async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     // Only apply to POST/PUT/PATCH requests
     if (!['POST', 'PUT', 'PATCH'].includes(req.method)) {
       return next();
@@ -20,30 +20,44 @@ export function idempotencyMiddleware(ttlHours: number = 24) {
 
     // Validate UUID format
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey)) {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'Invalid idempotency key format. Must be a valid UUID.',
         code: 'INVALID_IDEMPOTENCY_KEY'
       });
+      return;
     }
+
+    // Check if the request has auth context (should be guaranteed by middleware order)
+    if (!req.auth) {
+      res.status(401).json({
+        error: 'Authentication required for idempotency',
+        code: 'AUTHENTICATION_REQUIRED'
+      });
+      return;
+    }
+
+    // Now we can safely cast to AuthenticatedRequest
+    const authReq = req as AuthenticatedRequest;
 
     try {
       const { exists, response: cachedResponse } = await idempotencyService.checkIdempotency(
-        req.auth.lawFirm,
+        authReq.auth.lawFirm,
         idempotencyKey,
-        req.method,
-        req.path,
-        req.body
+        authReq.method,
+        authReq.path,
+        authReq.body
       );
 
       if (exists && cachedResponse) {
         logger.info('Returning cached idempotent response', {
           idempotencyKey,
-          lawFirm: req.auth.lawFirm,
-          method: req.method,
-          path: req.path
+          lawFirm: authReq.auth.lawFirm,
+          method: authReq.method,
+          path: authReq.path
         });
 
-        return res.status(cachedResponse.status).json(cachedResponse.body);
+        res.status(cachedResponse.status).json(cachedResponse.body);
+        return;
       }
 
       // Store original res.json method
@@ -55,11 +69,11 @@ export function idempotencyMiddleware(ttlHours: number = 24) {
         setImmediate(async () => {
           try {
             await idempotencyService.storeIdempotencyRecord(
-              req.auth.lawFirm,
+              authReq.auth.lawFirm,
               idempotencyKey,
-              req.method,
-              req.path,
-              req.body,
+              authReq.method,
+              authReq.path,
+              authReq.body,
               res.statusCode,
               body,
               ttlHours
@@ -68,7 +82,7 @@ export function idempotencyMiddleware(ttlHours: number = 24) {
             logger.error('Failed to store idempotency record', {
               error: storeError,
               idempotencyKey,
-              lawFirm: req.auth.lawFirm
+              lawFirm: authReq.auth.lawFirm
             });
           }
         });
@@ -83,7 +97,7 @@ export function idempotencyMiddleware(ttlHours: number = 24) {
       logger.error('Idempotency middleware error', {
         error,
         idempotencyKey,
-        lawFirm: req.auth?.lawFirm
+        lawFirm: authReq.auth?.lawFirm
       });
 
       // Continue without idempotency on error
@@ -91,7 +105,3 @@ export function idempotencyMiddleware(ttlHours: number = 24) {
     }
   };
 }
-
-
-
-
