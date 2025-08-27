@@ -1,10 +1,10 @@
 import { app, HttpRequest, HttpResponse, InvocationContext } from '@azure/functions';
 import { v4 as uuidv4 } from 'uuid';
-import { CreateDemographicsRequestSchema, Demographics } from '../../shared/types/demographics';
-import { databaseService } from '../../shared/database/database.service';
-import { queueService } from '../../shared/services/queue.service';
-import { authMiddleware, addRateLimitHeaders } from '../../shared/middleware/auth.middleware';
-import { logger } from '../monitor/winstonLogger';
+import { CreateDemographicsRequestSchema, Demographics } from '../shared/types/demographics';
+import { databaseService } from '../shared/database/database.service';
+import { queueService } from '../shared/services/queue.service';
+import { authMiddleware, addRateLimitHeaders } from '../middleware/auth.middleware';
+import { logger } from '../shared/services/logger.service';
 
 async function submitDemographics(request: HttpRequest, context: InvocationContext): Promise<HttpResponse> {
   const startTime = Date.now();

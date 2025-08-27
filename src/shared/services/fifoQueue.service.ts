@@ -1,7 +1,7 @@
 //Queue processing
 import { ServiceBusClient, ServiceBusMessage, ServiceBusSender, ServiceBusReceiver, ServiceBusAdministrationClient } from '@azure/service-bus';
 import { v4 as uuidv4 } from 'uuid';
-import { logger } from '../../azure-functions/monitor/winstonLogger';
+import { logger } from './logger.service';
 
 interface FifoQueueMessage {
   id: string;

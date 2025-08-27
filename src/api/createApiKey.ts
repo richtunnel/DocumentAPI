@@ -1,10 +1,10 @@
 import { app, HttpRequest, HttpResponse, InvocationContext } from '@azure/functions';
 import { v4 as uuidv4 } from 'uuid';
-import { CreateApiKeyRequestSchema } from '../../shared/types/apiKey';
-import { apiKeyService } from '../../shared/services/apiKey.service';
-import { authMiddleware, addRateLimitHeaders } from '../../shared/middleware/auth.middleware';
+import { CreateApiKeyRequestSchema } from '../shared/types/apiKey';
+import { apiKeyService } from '../shared/services/apiKey.service';
+import { authMiddleware, addRateLimitHeaders } from '../middleware/auth.middleware';
 import { z } from "zod";
-import { logger } from '../monitor/winstonLogger';
+import { logger } from '../shared/services/logger.service';
 
 // Production version with JWT authentication
 async function createApiKey(request: HttpRequest, context: InvocationContext): Promise<HttpResponse> {

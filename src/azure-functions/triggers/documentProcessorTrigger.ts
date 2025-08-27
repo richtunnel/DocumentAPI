@@ -1,7 +1,7 @@
 import { app, InvocationContext } from '@azure/functions';
 import { fifoQueueService } from '../../shared/services/fifoQueue.service';
 import { blobSasService } from '../../shared/services/blobSas.service';
-import { logger } from '../monitor/winstonLogger';
+import { logger } from '../../shared/services/logger.service';
 
 async function processUploadedDocument(blob: unknown, context: InvocationContext): Promise<void> {
   const startTime = Date.now();
@@ -100,6 +100,8 @@ async function processUploadedDocument(blob: unknown, context: InvocationContext
     // Log error and potentially send to dead letter queue
   }
 }
+
+
 
 // Register blob trigger
 app.storageBlob('processUploadedDocument', {

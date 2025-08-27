@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { ApiKey, CreateApiKeyRequest } from '../types/apiKey';
 import { databaseService } from '../database/database.service';
-import { logger } from '../../azure-functions/monitor/winstonLogger';
+import { logger } from './logger.service';
 
 
 

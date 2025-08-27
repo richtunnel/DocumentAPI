@@ -1,4 +1,4 @@
-import { logger } from "../../azure-functions/monitor/winstonLogger";
+import { logger } from "./logger.service";
 import { getPool } from "../../config/database";
 import crypto from 'crypto';
 import sql from "mssql";

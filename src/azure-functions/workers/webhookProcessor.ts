@@ -1,5 +1,5 @@
 import { app, InvocationContext } from '@azure/functions';
-import { logger } from '../monitor/winstonLogger';
+import { logger } from '../../shared/services/logger.service';
 
 // Dedicated webhook processor handler
 async function processWebhookQueueMessage(message: unknown, context: InvocationContext): Promise<void> {

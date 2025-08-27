@@ -1,7 +1,7 @@
 import { app, HttpRequest, HttpResponse, InvocationContext } from '@azure/functions';
-import { databaseService } from '../../shared/database/database.service';
-import { authMiddleware, addRateLimitHeaders } from '../../shared/middleware/auth.middleware';
-import { logger } from '../monitor/winstonLogger';
+import { databaseService } from '../shared/database/database.service';
+import { authMiddleware, addRateLimitHeaders } from '../middleware/auth.middleware';
+import { logger } from '../shared/services/logger.service';
 
 async function retrieveDemographics(request: HttpRequest, context: InvocationContext): Promise<HttpResponse> {
   const startTime = Date.now();

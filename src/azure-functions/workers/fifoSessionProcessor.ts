@@ -1,5 +1,5 @@
 import { app, InvocationContext } from '@azure/functions';
-import { logger } from '../monitor/winstonLogger';
+import { logger } from '../../shared/services/logger.service';
 import { databaseService } from '../../shared/database/database.service';
 import { fifoQueueService } from '../../shared/services/fifoQueue.service';
 

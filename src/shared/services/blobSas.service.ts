@@ -1,7 +1,6 @@
-// src/shared/services/blobSas.service.ts
 import { BlobServiceClient, BlobSASPermissions, generateBlobSASQueryParameters, StorageSharedKeyCredential } from '@azure/storage-blob';
 import { v4 as uuidv4 } from 'uuid';
-import { logger } from '../../azure-functions/monitor/winstonLogger';
+import { logger } from './logger.service';
 
 interface SasUrlResponse {
   uploadUrl: string;
@@ -20,11 +19,20 @@ interface DocumentUploadRequest {
   maxFileSizeMB?: number;
 }
 
+interface DocumentStatus {
+  status: 'pending' | 'uploaded' | 'processing' | 'completed' | 'failed';
+  uploaded_at?: string;
+  processed_at?: string;
+  file_size?: number;
+  error?: string;
+}
+
 class BlobSasService {
   private blobServiceClient: BlobServiceClient;
   private storageAccount: string;
   private storageKey: string;
   private documentsContainer = 'demographics-documents';
+  private documentStatusCache = new Map<string, DocumentStatus>();
 
   constructor() {
     const connectionString = process.env.BLOB_STORAGE_CONNECTION_STRING!;
@@ -39,9 +47,6 @@ class BlobSasService {
     this.storageKey = matches[2];
   }
 
-  /**
-   * Generate SAS URL for direct client upload to blob storage
-   */
   async generateUploadSasUrl(request: DocumentUploadRequest): Promise<SasUrlResponse> {
     try {
       const correlationId = uuidv4();
@@ -75,6 +80,11 @@ class BlobSasService {
       }, sharedKeyCredential);
 
       const uploadUrl = `https://${this.storageAccount}.blob.core.windows.net/${this.documentsContainer}/${blobName}?${sasToken}`;
+
+      // Store initial status
+      this.documentStatusCache.set(correlationId, {
+        status: 'pending',
+      });
 
       // Store metadata for blob trigger processing
       await this.storeUploadMetadata(correlationId, {
@@ -111,9 +121,42 @@ class BlobSasService {
     }
   }
 
-  /**
-   * Validate uploaded document
-   */
+  async getDocumentStatus(correlationId: string): Promise<DocumentStatus> {
+    try {
+      // Check cache first
+      if (this.documentStatusCache.has(correlationId)) {
+        return this.documentStatusCache.get(correlationId)!;
+      }
+
+      // TODO: Check database for persistent status
+      // For now, return default status
+      return {
+        status: 'pending',
+      };
+
+    } catch (error) {
+      logger.error('Error getting document status', { error, correlationId });
+      throw error;
+    }
+  }
+
+  async updateDocumentStatus(correlationId: string, status: DocumentStatus): Promise<void> {
+    try {
+      // Update cache
+      this.documentStatusCache.set(correlationId, status);
+
+      // TODO: Update database for persistent storage
+      logger.info('Document status updated', {
+        correlationId,
+        status: status.status
+      });
+
+    } catch (error) {
+      logger.error('Error updating document status', { error, correlationId });
+      throw error;
+    }
+  }
+
   async validateUploadedDocument(blobName: string, maxSizeMB: number = 10): Promise<{
     isValid: boolean;
     fileSize?: number;
@@ -135,11 +178,6 @@ class BlobSasService {
         };
       }
 
-      // Additional validations can be added here
-      // - Virus scanning
-      // - Content type verification
-      // - File format validation
-
       return {
         isValid: true,
         fileSize: fileSizeMB
@@ -154,9 +192,6 @@ class BlobSasService {
     }
   }
 
-  /**
-   * Get download URL with limited-time access
-   */
   async generateDownloadSasUrl(blobName: string, validForHours: number = 1): Promise<string> {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + validForHours);
@@ -180,7 +215,6 @@ class BlobSasService {
   }
 
   private sanitizeFileName(fileName: string): string {
-    // Remove special characters and spaces
     return fileName
       .replace(/[^a-zA-Z0-9.-]/g, '_')
       .replace(/_{2,}/g, '_')
@@ -194,14 +228,11 @@ class BlobSasService {
   }
 
   private async storeUploadMetadata(correlationId: string, metadata: any): Promise<void> {
-    // Store in database or cache for blob trigger processing
-    // This metadata will be used by the blob trigger to process the uploaded file
-    
-    // You can implement this using your database service
-    // await databaseService.storeUploadMetadata(correlationId, metadata);
-    
-    // For now, log the metadata (implement proper storage)
+    // Store in cache temporarily
     logger.info('Upload metadata stored', { correlationId, metadata });
+    
+    // TODO: Implement persistent storage in database
+    // await databaseService.storeUploadMetadata(correlationId, metadata);
   }
 }
 

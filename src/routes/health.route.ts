@@ -1,0 +1,274 @@
+import { Router } from 'express';
+import { databaseService } from '../shared/database/database.service';
+import { fifoQueueService } from '../shared/services/fifoQueue.service';
+import { rateLimiter } from '../shared/services/rateLimiter.service';
+import { logger } from '../shared/services/logger.service';
+import { allowAnonymous } from '../middleware/security.middleware';
+
+const healthRouter = Router();
+
+interface HealthCheckResult {
+  service: string;
+  status: 'healthy' | 'unhealthy' | 'degraded';
+  responseTime: number;
+  details?: any;
+  error?: string;
+}
+
+/**
+ * GET /api/v1/health
+ * Comprehensive health check
+ */
+healthRouter.get('/',
+  allowAnonymous(),
+  async (req: Request, res: Response) => {
+    const startTime = Date.now();
+    const checks: HealthCheckResult[] = [];
+    let overallStatus: 'healthy' | 'unhealthy' | 'degraded' = 'healthy';
+
+    try {
+      // Database health check
+      const dbCheck = await checkDatabase();
+      checks.push(dbCheck);
+
+      // Queue service health check
+      const queueCheck = await checkQueueService();
+      checks.push(queueCheck);
+
+      // Rate limiter health check
+      const rateLimiterCheck = await checkRateLimiter();
+      checks.push(rateLimiterCheck);
+
+      // Memory usage check
+      const memoryCheck = checkMemoryUsage();
+      checks.push(memoryCheck);
+
+      // Determine overall status
+      const unhealthyCount = checks.filter(check => check.status === 'unhealthy').length;
+      const degradedCount = checks.filter(check => check.status === 'degraded').length;
+
+      if (unhealthyCount > 0) {
+        overallStatus = 'unhealthy';
+      } else if (degradedCount > 0) {
+        overallStatus = 'degraded';
+      }
+
+      const totalTime = Date.now() - startTime;
+      const statusCode = overallStatus === 'healthy' ? 200 : 
+                        overallStatus === 'degraded' ? 200 : 503;
+
+      const response = {
+        status: overallStatus,
+        timestamp: new Date().toISOString(),
+        version: '1.0.0',
+        environment: process.env.NODE_ENV || 'unknown',
+        uptime: process.uptime(),
+        responseTime: totalTime,
+        server: {
+          node_version: process.version,
+          platform: process.platform,
+          arch: process.arch
+        },
+        checks: checks.reduce((acc, check) => {
+          acc[check.service] = {
+            status: check.status,
+            responseTime: check.responseTime,
+            details: check.details,
+            error: check.error,
+          };
+          return acc;
+        }, {} as any),
+        summary: {
+          total: checks.length,
+          healthy: checks.filter(check => check.status === 'healthy').length,
+          degraded: degradedCount,
+          unhealthy: unhealthyCount,
+        }
+      };
+
+      res.status(statusCode).json(response);
+
+    } catch (error) {
+      logger.error('Health check failed', { error });
+      
+      res.status(503).json({
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        error: 'Health check system failure',
+        responseTime: Date.now() - startTime
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/v1/health/ready
+ * Kubernetes readiness probe
+ */
+healthRouter.get('/ready', async (req: Request, res: Response) => {
+  try {
+    // Quick database connectivity check
+    await databaseService.getPool();
+    
+    res.status(200).json({
+      status: 'ready',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'not_ready',
+      timestamp: new Date().toISOString(),
+      error: 'Service dependencies not available'
+    });
+  }
+});
+
+
+// Health check helper functions
+async function checkDatabase(): Promise<HealthCheckResult> {
+  const startTime = Date.now();
+  
+  try {
+    const pool = await databaseService.getPool();
+    const result = await pool.request().query('SELECT 1 as health_check');
+    
+    const responseTime = Date.now() - startTime;
+    
+    if (result.recordset.length > 0 && result.recordset[0].health_check === 1) {
+      return {
+        service: 'database',
+        status: responseTime > 5000 ? 'degraded' : 'healthy',
+        responseTime,
+        details: {
+          connected: true,
+          query_success: true
+        }
+      };
+    } else {
+      return {
+        service: 'database',
+        status: 'unhealthy',
+        responseTime,
+        error: 'Invalid query result'
+      };
+    }
+  } catch (error) {
+    return {
+      service: 'database',
+      status: 'unhealthy',
+      responseTime: Date.now() - startTime,
+      error: error instanceof Error ? error.message : 'Unknown database error'
+    };
+  }
+}
+
+async function checkQueueService(): Promise<HealthCheckResult> {
+  const startTime = Date.now();
+  
+  try {
+    const demographicsStats = await fifoQueueService.getQueueStats('demographics');
+    const webhooksStats = await fifoQueueService.getQueueStats('webhooks');
+    
+    const responseTime = Date.now() - startTime;
+    const totalMessages = demographicsStats.activeMessages + webhooksStats.activeMessages;
+    
+    return {
+      service: 'queue',
+      status: responseTime > 3000 ? 'degraded' : 'healthy',
+      responseTime,
+      details: {
+        demographics_queue: demographicsStats,
+        webhooks_queue: webhooksStats,
+        total_active_messages: totalMessages,
+        status: totalMessages > 1000 ? 'high_load' : 'normal'
+      }
+    };
+  } catch (error) {
+    return {
+      service: 'queue',
+      status: 'unhealthy',
+      responseTime: Date.now() - startTime,
+      error: error instanceof Error ? error.message : 'Queue service error'
+    };
+  }
+}
+
+async function checkRateLimiter(): Promise<HealthCheckResult> {
+  const startTime = Date.now();
+  
+  try {
+    // Test with a dummy API key
+    const testApiKey = {
+      key_id: 'health_check',
+      rate_limits: {
+        requests_per_minute: 60,
+        requests_per_hour: 3600,
+        requests_per_day: 86400,
+        burst_limit: 100,
+      }
+    } as any;
+
+    await rateLimiter.checkRateLimit(testApiKey, '127.0.0.1');
+    
+    const responseTime = Date.now() - startTime;
+    
+    return {
+      service: 'rate_limiter',
+      status: responseTime > 2000 ? 'degraded' : 'healthy',
+      responseTime,
+      details: {
+        redis_connected: !!process.env.REDIS_CONNECTION_STRING,
+        fallback_mode: !process.env.REDIS_CONNECTION_STRING
+      }
+    };
+  } catch (error) {
+    return {
+      service: 'rate_limiter',
+      status: 'degraded',
+      responseTime: Date.now() - startTime,
+      error: error instanceof Error ? error.message : 'Rate limiter error'
+    };
+  }
+}
+
+function checkMemoryUsage(): HealthCheckResult {
+  const startTime = Date.now();
+  
+  try {
+    const memUsage = process.memoryUsage();
+    const memUsageMB = {
+      rss: Math.round(memUsage.rss / 1024 / 1024),
+      heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
+      heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
+      external: Math.round(memUsage.external / 1024 / 1024),
+    };
+
+    const responseTime = Date.now() - startTime;
+    
+    let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
+    if (memUsageMB.heapUsed > 800) {
+      status = 'unhealthy';
+    } else if (memUsageMB.heapUsed > 400) {
+      status = 'degraded';
+    }
+
+    return {
+      service: 'memory',
+      status,
+      responseTime,
+      details: {
+        usage_mb: memUsageMB,
+        uptime_seconds: Math.round(process.uptime()),
+      }
+    };
+  } catch (error) {
+    return {
+      service: 'memory',
+      status: 'unhealthy',
+      responseTime: Date.now() - startTime,
+      error: error instanceof Error ? error.message : 'Memory check error'
+    };
+  }
+}
+
+export default healthRouter;

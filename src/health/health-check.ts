@@ -2,8 +2,8 @@ import { app, HttpRequest, HttpResponse, InvocationContext } from '@azure/functi
 import { databaseService } from '../../shared/database/database.service';
 import { queueService } from '../../shared/services/queue.service';
 import { rateLimiter } from '../../shared/services/rateLimiter.service';
-import { authMiddleware } from '../../shared/middleware/auth.middleware';
-import { logger } from '../monitor/winstonLogger';
+import { authMiddleware } from '../../middleware/auth.middleware';
+import { logger } from '../../shared/services/logger.service';
 
 interface HealthCheckResult {
   service: string;
@@ -191,7 +191,7 @@ async function checkRateLimiter(): Promise<HealthCheckResult> {
     const testApiKey = {
       key_id: 'health_check',
       rate_limits: {
-        requests_per_minute: 60,
+        requests_per_minute: 60, // #edit
         requests_per_hour: 3600,
         requests_per_day: 86400,
         burst_limit: 100,

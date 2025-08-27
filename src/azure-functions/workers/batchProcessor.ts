@@ -1,5 +1,5 @@
 import { app, InvocationContext } from '@azure/functions';
-import { logger } from '../monitor/winstonLogger';
+import { logger } from '../../shared/services/logger.service';
 import { promisify } from 'util';
 import * as zlib from 'zlib';
 import * as os from 'os';

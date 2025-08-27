@@ -1,5 +1,5 @@
 import sql from 'mssql';
-import { logger } from '../azure-functions/monitor/winstonLogger';
+import { logger } from '../shared/services/logger.service';
 
 const config: sql.config = {
   server: process.env.SQL_SERVER || 'localhost',

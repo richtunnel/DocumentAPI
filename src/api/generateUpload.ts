@@ -1,8 +1,8 @@
 import { app, HttpRequest, HttpResponse, InvocationContext } from '@azure/functions';
-import { blobSasService } from '../../shared/services/blobSas.service';
-import { authMiddleware, addRateLimitHeaders } from '../../shared/middleware/auth.middleware';
+import { blobSasService } from '../shared/services/blobSas.service';
+import { authMiddleware, addRateLimitHeaders } from '../middleware/auth.middleware';
 import { z } from 'zod';
-import { logger } from '../monitor/winstonLogger';
+import { logger } from '../shared/services/logger.service';
 
 const GenerateUploadUrlSchema = z.object({
   fileName: z.string().min(1).max(255),
