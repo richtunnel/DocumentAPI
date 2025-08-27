@@ -10,20 +10,21 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3000
-      - DATABASE_CONNECTION_STRING=mssql://sa:YourStrongPassword@mssql:1433/milestonepathway?encrypt=true&trustServerCertificate=true
+      - DATABASE_CONNECTION_STRING=mssql://sa:GreenSun83**@mssql:1433/PartnersDB?encrypt=true&trustServerCertificate=true
       - REDIS_CONNECTION_STRING=your-redis-connection-string
       - AzureWebJobsStorage=UseDevelopmentStorage=true
       - SERVICE_BUS_CONNECTION_STRING=Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=yourkey
-      - WEBHOOK_SECRET=your-webhook-secret-key
+      - WEBHOOK_SECRET=BUhOuLh3wDw1dX8610Be7C6Vw8UWUupq09mVQzkADKl0CC2Ad70LnKYqjiRIdj6JxFOg2cU08scYb0UnyIxlfatxR68n2wu
       - DOCUMENTS_CONTAINER_NAME=demographics-documents
       - FUNCTIONS_WORKER_RUNTIME=node
       - DB_SERVER=your-sql-server.database.windows.net
-      - DB_DATABASE=your-database-name
-      - DB_USER=your-username
-      - DB_PASSWORD=your-password
+      - DB_DATABASE=PartnersDB
+      - DB_USER=sa
+      - DB_PASSWORD=GreenSun83**
       - DB_PORT=1433
       - QUEUE_CONNECTION_STRING=your-storage-account-connection-string
-      - API_KEY_ENCRYPTION_KEY=your-32-char-encryption-key
+      - API_KEY_ENCRYPTION_KEY=fVLnMgvPKaGlJdiAtIXrV7Jw4vgvop2M58DvREkI0gdATicjonAKyl2jnCC4XdMpVo42Mq5Grt8eGgTs8hqBl24KFfoJtkTc
+
       - ENVIRONMENT=development
     volumes:
       - .:/app
@@ -40,18 +41,18 @@ services:
     platform: linux/amd64
     environment:
       - NODE_ENV=development
-      - DATABASE_CONNECTION_STRING=mssql://sa:Green$un@83@mssql:1433/milestonepartners?encrypt=true&trustServerCertificate=true
+      - DATABASE_CONNECTION_STRING=mssql://sa:GreenSun83**@mssql:1433/PartnersDB?encrypt=true&trustServerCertificate=true
       - REDIS_CONNECTION_STRING=your-redis-connection-string
       - AzureWebJobsStorage=UseDevelopmentStorage=true
       - SERVICE_BUS_CONNECTION_STRING=Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=yourkey
       - FUNCTIONS_WORKER_RUNTIME=node
       - DB_SERVER=your-sql-server.database.windows.net
-      - DB_DATABASE=your-database-name
-      - DB_USER=your-username
-      - DB_PASSWORD=your-password
+      - DB_DATABASE=PartnersDB
+      - DB_USER=sa
+      - DB_PASSWORD=GreenSun83**
       - DB_PORT=1433
       - QUEUE_CONNECTION_STRING=your-storage-account-connection-string
-      - WEBHOOK_SECRET=your-webhook-secret-key
+      - WEBHOOK_SECRET=BUhOuLh3wDw1dX8610Be7C6Vw8UWUupq09mVQzkADKl0CC2Ad70LnKYqjiRIdj6JxFOg2cU08scYb0UnyIxlfatxR68n2wu
       - API_KEY_ENCRYPTION_KEY=your-32-char-encryption-key
       - ENVIRONMENT=development
     depends_on:
@@ -67,19 +68,19 @@ services:
     platform: linux/amd64
     environment:
       - NODE_ENV=development
-      - DATABASE_CONNECTION_STRING=mssql://sa:Green$un@83@mssql:1433/milestone_partners?encrypt=true&trustServerCertificate=true
+      - DATABASE_CONNECTION_STRING=mssql://sa:GreenSun83**@mssql:1433/PartnersDB?encrypt=true&trustServerCertificate=true
       - REDIS_CONNECTION_STRING=your-redis-connection-string
       - AzureWebJobsStorage=UseDevelopmentStorage=true
       - SERVICE_BUS_CONNECTION_STRING=Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=yourkey
       - FUNCTIONS_WORKER_RUNTIME=node
       - DB_SERVER=your-sql-server.database.windows.net
-      - DB_DATABASE=your-database-name
-      - DB_USER=your-username
-      - DB_PASSWORD=your-password
+      - DB_DATABASE=PartnersDB
+      - DB_USER=sa
+      - DB_PASSWORD=GreenSun83**
       - DB_PORT=1433
       - QUEUE_CONNECTION_STRING=your-storage-account-connection-string
-      - WEBHOOK_SECRET=your-webhook-secret-key
-      - API_KEY_ENCRYPTION_KEY=your-32-char-encryption-key
+      - WEBHOOK_SECRET=BUhOuLh3wDw1dX8610Be7C6Vw8UWUupq09mVQzkADKl0CC2Ad70LnKYqjiRIdj6JxFOg2cU08scYb0UnyIxlfatxR68n2wu
+      - API_KEY_ENCRYPTION_KEY=fVLnMgvPKaGlJdiAtIXrV7Jw4vgvop2M58DvREkI0gdATicjonAKyl2jnCC4XdMpVo42Mq5Grt8eGgTs8hqBl24KFfoJtkTc
       - ENVIRONMENT=development
     depends_on:
       - mssql
@@ -91,21 +92,21 @@ services:
     image: mcr.microsoft.com/mssql/server:2022-latest
     platform: linux/amd64
     environment:
-      - SA_PASSWORD=Green$un@83
+      - SA_PASSWORD=GreenSun83**
       - ACCEPT_EULA=Y
       - MSSQL_PID=Developer
-      - MSSQL_USER=sa
     ports:
       - "1433:1433"
     volumes:
       - mssql-data:/var/opt/mssql
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-    # healthcheck:
-    # test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P ${SA_PASSWORD} -Q "SELECT 1" || exit 1
-    # interval: 10s
-    # timeout: 5s
-    # retries: 5
-    # start_period: 30s
+      - ./src/scripts/init-database.sql:/docker-entrypoint-initdb.d/init-database.sql
+    healthcheck:
+      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P GreenSun83** -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
   redis:
     image: redis:7.0
     ports:

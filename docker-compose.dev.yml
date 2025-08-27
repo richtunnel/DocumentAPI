@@ -13,7 +13,7 @@ services:
       - languageWorkers__node__arguments=--inspect=0.0.0.0:9229
       # Database
       - DB_SERVER=mssql
-      - DB_DATABASE=DemographicsDB  
+      - DB_DATABASE=PartnersDB  
       - DB_USER=sa
       - DB_PASSWORD=YourStrong@Password123
       - DB_PORT=1433

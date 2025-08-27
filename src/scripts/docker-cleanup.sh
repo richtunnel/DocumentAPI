@@ -17,7 +17,7 @@ fi
 # Clean up unused images
 docker image prune -f
 
-echo "✅ Cleanup completed!"
+echo "Cleanup completed!"
 
 
 ## Quick Start Commands

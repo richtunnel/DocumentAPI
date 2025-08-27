@@ -169,7 +169,7 @@ print_step "Step 10: Verifying database..."
 
 DB_CHECK=$(docker exec demographics-mssql /opt/mssql-tools/bin/sqlcmd \
     -S localhost -U sa -P YourStrong@Password123 \
-    -Q "SELECT COUNT(*) as count FROM DemographicsDB.dbo.Demographics WHERE firstname = 'John' AND lastname = 'TestCase'" \
+    -Q "SELECT COUNT(*) as count FROM PartnersDB.dbo.Demographics WHERE firstname = 'John' AND lastname = 'TestCase'" \
     -h -1 2>/dev/null | tr -d ' ')
 
 if [ "$DB_CHECK" = "1" ]; then

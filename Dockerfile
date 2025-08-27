@@ -49,4 +49,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:3000/api/v1/health || exit 1
 
 # Default command (can be overridden)
-CMD ["func", "start", "--host", "0.0.0.0"]
+CMD ["sh", "-c", "node dist/express-app/server.js & func start --host 0.0.0.0 --port 7071"]
