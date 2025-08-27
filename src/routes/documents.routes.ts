@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { blobSasService } from '../shared/services/blobSas.service';
 import { logger } from '../shared/services/logger.service';
-import { AuthenticatedRequest } from '../middleware/auth.middleware';
+import { AuthenticatedRequest } from '../shared/types/express-extensions';
 import { requireAuth } from '../middleware/security.middleware';
 import { validationMiddleware } from '../middleware/validation.middleware';
 import { z } from 'zod';

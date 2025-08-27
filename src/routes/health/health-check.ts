@@ -1,12 +1,12 @@
-import { Router, Response, NextFunction } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import { databaseService } from '../shared/database/database.service';
-import { fifoQueueService } from '../shared/services/fifoQueue.service';
+import { queueService } from '../shared/services/queue.service';
 import { rateLimiter } from '../shared/services/rateLimiter.service';
+import { authMiddleware } from '../middleware/auth.middleware';
 import { logger } from '../shared/services/logger.service';
-import { allowAnonymous } from '../middleware/security.middleware';
 import { AuthenticatedRequest } from '../shared/types/express-extensions';
-
-const healthRouter = Router();
+import { ApiKey } from '../shared/types/demographics';
 
 interface HealthCheckResult {
   service: string;
@@ -16,18 +16,37 @@ interface HealthCheckResult {
   error?: string;
 }
 
+const router = Router();
+
 /**
  * GET /api/v1/health
- * Comprehensive health check
+ * Perform system health check
  */
-healthRouter.get('/',
-  allowAnonymous(),
-  async (req: AuthenticatedRequest, res: Response, next: NextFunction) : Promise<void> => {
+router.get(
+  '/',
+  authMiddleware({ allowAnonymous: true, requiredScopes: [] }),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const startTime = Date.now();
     const checks: HealthCheckResult[] = [];
     let overallStatus: 'healthy' | 'unhealthy' | 'degraded' = 'healthy';
+    let isAuthenticated = false;
+    let authInfo: { lawFirm: string; keyId: string } | null = null;
 
     try {
+      // Check authentication status
+      const authReq = req as AuthenticatedRequest;
+      if (authReq.auth) {
+        isAuthenticated = true;
+        authInfo = {
+          lawFirm: authReq.auth.lawFirm,
+          keyId: authReq.auth.keyId,
+        };
+        logger.info('Authenticated health check', {
+          requestId: req.requestId,
+          ...authInfo,
+        });
+      }
+
       // Database health check
       const dbCheck = await checkDatabase();
       checks.push(dbCheck);
@@ -55,21 +74,16 @@ healthRouter.get('/',
       }
 
       const totalTime = Date.now() - startTime;
-      const statusCode = overallStatus === 'healthy' ? 200 : 
-                        overallStatus === 'degraded' ? 200 : 503;
 
       const response = {
         status: overallStatus,
         timestamp: new Date().toISOString(),
         version: '1.0.0',
-        environment: process.env.NODE_ENV || 'unknown',
+        environment: process.env.ENVIRONMENT || 'unknown',
         uptime: process.uptime(),
         responseTime: totalTime,
-        server: {
-          node_version: process.version,
-          platform: process.platform,
-          arch: process.arch
-        },
+        authenticated: isAuthenticated,
+        authInfo: isAuthenticated ? authInfo : undefined,
         checks: checks.reduce((acc, check) => {
           acc[check.service] = {
             status: check.status,
@@ -78,63 +92,48 @@ healthRouter.get('/',
             error: check.error,
           };
           return acc;
-        }, {} as any),
+        }, {} as Record<string, any>),
         summary: {
           total: checks.length,
           healthy: checks.filter(check => check.status === 'healthy').length,
           degraded: degradedCount,
           unhealthy: unhealthyCount,
-        }
+        },
+        requestId: req.requestId,
       };
 
-      res.status(statusCode).json(response);
+      const statusCode = overallStatus === 'healthy' ? 200 : overallStatus === 'degraded' ? 200 : 503;
 
+      res.status(statusCode).json(response);
     } catch (error) {
-      logger.error('Health check failed', { error });
-      
+      const totalTime = Date.now() - startTime;
+      logger.error('Health check failed', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        requestId: req.requestId,
+      });
+
       res.status(503).json({
         status: 'unhealthy',
         timestamp: new Date().toISOString(),
         error: 'Health check system failure',
-        responseTime: Date.now() - startTime
+        responseTime: totalTime,
+        authenticated: false,
+        requestId: req.requestId,
       });
     }
   }
 );
 
-/**
- * GET /api/v1/health/ready
- * Kubernetes readiness probe
- */
-healthRouter.get('/ready', async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    // Quick database connectivity check
-    await databaseService.getPool();
-    
-    res.status(200).json({
-      status: 'ready',
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    res.status(503).json({
-      status: 'not_ready',
-      timestamp: new Date().toISOString(),
-      error: 'Service dependencies not available'
-    });
-  }
-});
-
-
-// Health check helper functions
 async function checkDatabase(): Promise<HealthCheckResult> {
   const startTime = Date.now();
-  
+
   try {
     const pool = await databaseService.getPool();
     const result = await pool.request().query('SELECT 1 as health_check');
-    
+
     const responseTime = Date.now() - startTime;
-    
+
     if (result.recordset.length > 0 && result.recordset[0].health_check === 1) {
       return {
         service: 'database',
@@ -142,15 +141,15 @@ async function checkDatabase(): Promise<HealthCheckResult> {
         responseTime,
         details: {
           connected: true,
-          query_success: true
-        }
+          query_success: true,
+        },
       };
     } else {
       return {
         service: 'database',
         status: 'unhealthy',
         responseTime,
-        error: 'Invalid query result'
+        error: 'Invalid query result',
       };
     }
   } catch (error) {
@@ -158,83 +157,94 @@ async function checkDatabase(): Promise<HealthCheckResult> {
       service: 'database',
       status: 'unhealthy',
       responseTime: Date.now() - startTime,
-      error: error instanceof Error ? error.message : 'Unknown database error'
+      error: error instanceof Error ? error.message : 'Unknown database error',
     };
   }
 }
 
 async function checkQueueService(): Promise<HealthCheckResult> {
   const startTime = Date.now();
-  
+
   try {
-    const demographicsStats = await fifoQueueService.getQueueStats('demographics');
-    const webhooksStats = await fifoQueueService.getQueueStats('webhooks');
-    
+    await queueService.ensureQueuesExist();
+    const processQueueLength = await queueService.getQueueLength('process');
+    const webhookQueueLength = await queueService.getQueueLength('webhook');
+
     const responseTime = Date.now() - startTime;
-    const totalMessages = demographicsStats.activeMessages + webhooksStats.activeMessages;
-    
+    const totalMessages = processQueueLength + webhookQueueLength;
+
     return {
       service: 'queue',
       status: responseTime > 3000 ? 'degraded' : 'healthy',
       responseTime,
       details: {
-        demographics_queue: demographicsStats,
-        webhooks_queue: webhooksStats,
-        total_active_messages: totalMessages,
-        status: totalMessages > 1000 ? 'high_load' : 'normal'
-      }
+        process_queue_length: processQueueLength,
+        webhook_queue_length: webhookQueueLength,
+        total_messages: totalMessages,
+        status: totalMessages > 1000 ? 'high_load' : 'normal',
+      },
     };
   } catch (error) {
     return {
       service: 'queue',
       status: 'unhealthy',
       responseTime: Date.now() - startTime,
-      error: error instanceof Error ? error.message : 'Queue service error'
+      error: error instanceof Error ? error.message : 'Queue service error',
     };
   }
 }
 
 async function checkRateLimiter(): Promise<HealthCheckResult> {
   const startTime = Date.now();
-  
+
   try {
-    // Test with a dummy API key
-    const testApiKey = {
+    const testApiKey: ApiKey = {
+      id: uuidv4(),
+      partitionKey: 'health_check_partition',
       key_id: 'health_check',
+      key_hash: 'dummy_hash',
+      name: 'Health Check Key',
+      law_firm: 'health_check_firm',
+      created_by: uuidv4(),
+      status: 'active',
       rate_limits: {
         requests_per_minute: 60,
         requests_per_hour: 3600,
         requests_per_day: 86400,
         burst_limit: 100,
-      }
-    } as any;
+      },
+      scopes: [],
+      usage_count: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
 
     await rateLimiter.checkRateLimit(testApiKey, '127.0.0.1');
-    
+
     const responseTime = Date.now() - startTime;
-    
+
     return {
       service: 'rate_limiter',
       status: responseTime > 2000 ? 'degraded' : 'healthy',
       responseTime,
       details: {
         redis_connected: !!process.env.REDIS_CONNECTION_STRING,
-        fallback_mode: !process.env.REDIS_CONNECTION_STRING
-      }
+        fallback_mode: !process.env.REDIS_CONNECTION_STRING,
+      },
     };
   } catch (error) {
     return {
       service: 'rate_limiter',
       status: 'degraded',
       responseTime: Date.now() - startTime,
-      error: error instanceof Error ? error.message : 'Rate limiter error'
+      error: error instanceof Error ? error.message : 'Rate limiter error',
     };
   }
 }
 
 function checkMemoryUsage(): HealthCheckResult {
   const startTime = Date.now();
-  
+
   try {
     const memUsage = process.memoryUsage();
     const memUsageMB = {
@@ -245,7 +255,7 @@ function checkMemoryUsage(): HealthCheckResult {
     };
 
     const responseTime = Date.now() - startTime;
-    
+
     let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
     if (memUsageMB.heapUsed > 800) {
       status = 'unhealthy';
@@ -260,16 +270,16 @@ function checkMemoryUsage(): HealthCheckResult {
       details: {
         usage_mb: memUsageMB,
         uptime_seconds: Math.round(process.uptime()),
-      }
+      },
     };
   } catch (error) {
     return {
       service: 'memory',
       status: 'unhealthy',
       responseTime: Date.now() - startTime,
-      error: error instanceof Error ? error.message : 'Memory check error'
+      error: error instanceof Error ? error.message : 'Memory check error',
     };
   }
 }
 
-export default healthRouter;
+export default router;

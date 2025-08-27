@@ -3,10 +3,17 @@ import { Request, Response, NextFunction } from 'express';
 import { logger } from '../shared/services/logger.service';
 import { AuthenticatedRequest } from '../shared/types/express-extensions';
 
+export interface AuthContext {
+  apiKey: any;
+  lawFirm: string;
+  keyId: string;
+  scopes: string[];
+}
+
 const idempotencyService = new IdempotencyService();
 
 export function idempotencyMiddleware(ttlHours: number = 24) {
-  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     // Only apply to POST/PUT/PATCH requests
     if (!['POST', 'PUT', 'PATCH'].includes(req.method)) {
       return next();

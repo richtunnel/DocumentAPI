@@ -139,11 +139,10 @@ async function processWebhookFifoMessage(message: unknown, context: InvocationCo
 async function processDocumentMessage(message: unknown, context: InvocationContext): Promise<void> {
   const startTime = Date.now();
   const executionId = context.invocationId;
+   const messageId = context.triggerMetadata?.messageId as string;
+  const deliveryCount = context.triggerMetadata?.deliveryCount as number;
 
   try {
-    const messageId = context.triggerMetadata?.messageId as string;
-    const deliveryCount = context.triggerMetadata?.deliveryCount as number;
-
     logger.info('Processing document message', {
       executionId,
       messageId,

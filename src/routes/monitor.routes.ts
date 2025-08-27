@@ -1,7 +1,8 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import { fifoQueueService } from '../shared/services/fifoQueue.service';
 import { logger } from '../shared/services/logger.service';
 import { requireAuth } from '../middleware/security.middleware';
+import { AuthenticatedRequest } from '../shared/types/express-extensions';
 
 const monitoringRouter = Router();
 
@@ -11,7 +12,7 @@ const monitoringRouter = Router();
  */
 monitoringRouter.get('/queues',
   requireAuth(['demographics:read']),
-  async (req: Request, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     try {
       const demographicsStats = await fifoQueueService.getQueueStats('demographics');
       const webhooksStats = await fifoQueueService.getQueueStats('webhooks');
@@ -45,7 +46,7 @@ monitoringRouter.get('/queues',
  */
 monitoringRouter.get('/metrics',
   requireAuth(['demographics:read']),
-  async (req: Request, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     try {
       const memUsage = process.memoryUsage();
       const cpuUsage = process.cpuUsage();

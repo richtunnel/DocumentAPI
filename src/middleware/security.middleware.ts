@@ -12,7 +12,8 @@ export function securityMiddleware(req: Request, res: Response, next: NextFuncti
     'X-Frame-Options': 'DENY',
     'X-XSS-Protection': '1; mode=block',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
-    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains'
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    'X-Correlation-ID': req.requestId || require('uuid').v4()
   });
 
   next();

@@ -1,9 +1,9 @@
-import { Router } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateApiKeyRequestSchema } from '../shared/types/apiKey';
 import { apiKeyService } from '../shared/services/apiKey.service';
 import { logger } from '../shared/services/logger.service';
-import { AuthenticatedRequest } from '../middleware/auth.middleware';
+import { AuthenticatedRequest } from '../shared/types/express-extensions';
 import { requireAdmin } from '../middleware/security.middleware';
 import { validationMiddleware } from '../middleware/validation.middleware';
 import { z } from 'zod';
@@ -29,7 +29,7 @@ adminRouter.post('/api-keys',
       ? CreateApiKeyRequestSchema 
       : DevCreateApiKeySchema
   ),
-  async (req: AuthenticatedRequest, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     const startTime = Date.now();
     
     try {
@@ -104,6 +104,8 @@ adminRouter.post('/api-keys',
         requestId: req.requestId,
         processingTime
       });
+
+      next(error);
     }
   }
 );

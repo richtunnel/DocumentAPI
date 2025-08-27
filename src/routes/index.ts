@@ -4,32 +4,14 @@ import { CreateDemographicsRequestSchema, Demographics } from '../shared/types/d
 import { databaseService } from '../shared/database/database.service';
 import { fifoQueueService } from '../shared/services/fifoQueue.service';
 import { logger } from '../shared/services/logger.service';
-import { AuthenticatedRequest, requireAuth } from '../middleware/auth.middleware';
+import { AuthenticatedRequest } from '../shared/types/express-extensions';
+import { requireAuth } from '../middleware/security.middleware';
 import { validationMiddleware } from '../middleware/validation.middleware';
 import { idempotencyMiddleware } from '../middleware/idempotency.middleware';
+import { GetDemographicsQuerySchema, BatchSubmitSchema } from '../shared/types/demographics';
 import { z } from 'zod';
 
 const router = Router();
-
-// Validation schemas
-export const GetDemographicsQuerySchema = z.object({
-  limit: z.string().transform(val => Math.min(parseInt(val) || 50, 100)).optional(),
-  offset: z.string().transform(val => parseInt(val) || 0).optional(),
-  filter_claimanttype: z.string().optional(),
-  filter_status: z.string().optional(),
-  search: z.string().optional(),
-});
-
-const BatchSubmitSchema = z.object({
-  demographics: z.array(CreateDemographicsRequestSchema).min(1).max(100),
-  webhook_url: z.string().url().optional(),
-  webhook_events: z.array(z.enum(['created', 'updated', 'processed', 'failed'])).optional(),
-  batch_options: z.object({
-    priority: z.number().min(1).max(10).default(5),
-    process_immediately: z.boolean().default(false),
-    notify_on_completion: z.boolean().default(true)
-  }).optional()
-});
 
 /**
  * POST /api/v1/demographics
@@ -355,7 +337,7 @@ router.get('/',
  */
 router.get('/:id',
   requireAuth(['demographics:read']),
-  async (req: AuthenticatedRequest, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) : Promise<void> => {
     const startTime = Date.now();
     
     try {
@@ -370,7 +352,7 @@ router.get('/:id',
       const demographic = await databaseService.getDemographicById(id, req.auth.lawFirm);
 
       if (!demographic) {
-        return res.status(404).json({
+       res.status(404).json({
           success: false,
           error: 'Demographic record not found',
           code: 'DEMOGRAPHIC_NOT_FOUND',
@@ -420,7 +402,7 @@ router.put('/:id',
   requireAuth(['demographics:write']),
   idempotencyMiddleware(24),
   validationMiddleware(CreateDemographicsRequestSchema),
-  async (req: AuthenticatedRequest, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) : Promise<void> => {
     const startTime = Date.now();
     
     try {
@@ -436,7 +418,7 @@ router.put('/:id',
       // Check if record exists
       const existing = await databaseService.getDemographicById(id, req.auth.lawFirm);
       if (!existing) {
-        return res.status(404).json({
+        res.status(404).json({
           success: false,
           error: 'Demographic record not found',
           code: 'DEMOGRAPHIC_NOT_FOUND',
@@ -528,7 +510,7 @@ router.put('/:id',
  */
 router.delete('/:id',
   requireAuth(['demographics:delete']),
-  async (req: AuthenticatedRequest, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) : Promise<void> => {
     const startTime = Date.now();
     
     try {
@@ -543,7 +525,7 @@ router.delete('/:id',
       // Check if record exists
       const existing = await databaseService.getDemographicById(id, req.auth.lawFirm);
       if (!existing) {
-        return res.status(404).json({
+      res.status(404).json({
           success: false,
           error: 'Demographic record not found',
           code: 'DEMOGRAPHIC_NOT_FOUND',

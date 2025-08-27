@@ -10,7 +10,6 @@ const AltClaimantTypeSchema = z.enum(['Personal Representative (POA)', 'Trustee'
 const AttorneyFeeCalcMethodSchema = z.enum(['Gross', 'Net Cost']);
 const LienTypeSchema = z.enum(['Medicare', 'Medicaid', 'Private-PLRP', 'Private-Non-PLRP', 'Military/HIS', 'Other (medical)']);
 
-// Complete Demographics Schema based on your field specification
 export const DemographicsSchema = z.object({
   id: z.string().uuid(),
   partitionKey: z.string(),
@@ -259,7 +258,18 @@ export const DemographicsSchema = z.object({
   status: z.enum(['active', 'inactive', 'archived']).default('active'),
 });
 
+
 export type Demographics = z.infer<typeof DemographicsSchema>;
+
+export const GetDemographicsQuerySchema = z.object({
+  limit: z.coerce.number().min(1).max(100).default(50).optional(),
+  offset: z.coerce.number().min(0).default(0).optional(),
+  filter_claimanttype: z.string().optional(),
+  filter_status: z.string().optional(),
+  search: z.string().optional(),
+});
+
+export type GetDemographicsQuery = z.infer<typeof GetDemographicsQuerySchema>
 
 export const CreateDemographicsRequestSchema = DemographicsSchema.omit({
   id: true,
@@ -270,6 +280,17 @@ export const CreateDemographicsRequestSchema = DemographicsSchema.omit({
 });
 
 export type CreateDemographicsRequest = z.infer<typeof CreateDemographicsRequestSchema>;
+
+export const BatchSubmitSchema = z.object({
+  demographics: z.array(CreateDemographicsRequestSchema).min(1).max(100),
+  webhook_url: z.string().url().optional(),
+  webhook_events: z.array(z.enum(['created', 'updated', 'processed', 'failed'])).optional(),
+  batch_options: z.object({
+    priority: z.number().min(1).max(10).default(5),
+    process_immediately: z.boolean().default(false),
+    notify_on_completion: z.boolean().default(true),
+  }).optional(),
+});
 
 // API Key Schemas (from your example)
 export const ApiKeySchema = z.object({
@@ -354,4 +375,3 @@ export const QueueMessageSchema = z.object({
 });
 
 export type QueueMessage = z.infer<typeof QueueMessageSchema>;
-

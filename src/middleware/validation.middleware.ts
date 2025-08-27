@@ -5,7 +5,7 @@ export function validationMiddleware<T>(
   schema: ZodSchema<T>, 
   target: 'body' | 'query' | 'params' = 'body'
 ) {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, next: NextFunction) : void =>  {
     try {
       const data = target === 'body' ? req.body : 
                   target === 'query' ? req.query : req.params;
@@ -23,7 +23,7 @@ export function validationMiddleware<T>(
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        return res.status(400).json({
+         res.status(400).json({
           error: 'Validation failed',
           code: 'VALIDATION_ERROR',
           details: error.issues.map(issue => ({
