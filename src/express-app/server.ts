@@ -8,8 +8,9 @@ import { logger } from '../shared/services/logger.service';
 import { loggingMiddleware } from '../middleware/logger.middleware';
 import { errorMiddleware } from '../middleware/error.middleware';
 import { securityMiddleware } from '../middleware/security.middleware';
+import client from 'prom-client';
 
-// Import routes
+// routes
 import demographicsRoutes from '../routes/demographics.routes';
 import documentsRoutes from '../routes/documents.routes';
 import adminRoutes from '../routes/admin.route';
@@ -18,6 +19,15 @@ import monitoringRoutes from '../routes/monitor.routes';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+if(process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production') {
+const register = new client.Registry();
+client.collectDefaultMetrics({ register });
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
+});
+}
 
 // Trust proxy for proper IP detection
 app.set('trust proxy', 1);
