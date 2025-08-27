@@ -4,7 +4,7 @@ import { Demographics } from './demographics';
 declare global {
   namespace Express {
     interface Request {
-     requestId: string;
+     requestId?: string;
       rawBody?: string;
       auth: {
         apiKey: ApiKey;
@@ -57,6 +57,7 @@ export interface AuthenticatedRequest extends Request {
   auth: {
     apiKey: ApiKey; 
     lawFirm: string;
+    requestId?: string; 
     keyId: string;
     scopes: string[];
   };

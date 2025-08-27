@@ -1,24 +1,42 @@
-#Azure Functions official Node.js image
-FROM mcr.microsoft.com/azure-functions/node:4-node18
+# Azure Functions official Node.js 20 image
+FROM mcr.microsoft.com/azure-functions/node:4.0-node20 AS build
+
+# Install Yarn
+RUN npm install -g yarn
 
 WORKDIR /app
 
-COPY package*.json ./
-COPY host.json ./
-COPY local.settings.json ./
+# Copy dependency files first (better caching)
+COPY package*.json yarn.lock* ./
 COPY tsconfig.json ./
+COPY host.json ./
 
-
-# Install dependencies
-RUN npm ci --only=production
-
-RUN npm install -g azure-functions-core-tools@4 --unsafe-perm true
+# Install ALL dependencies (including dev) for build
+RUN yarn install --frozen-lockfile --ignore-engines
 
 # Copy source code
 COPY src/ ./src/
 
 # Build TypeScript
-RUN npm run build
+RUN yarn build
+
+
+# Production image
+FROM mcr.microsoft.com/azure-functions/node:4.0-node20
+
+# Install Yarn + Azure Functions Core Tools
+RUN npm install -g yarn azure-functions-core-tools@4 --unsafe-perm true
+
+WORKDIR /app
+
+# Copy only necessary files from build stage
+COPY --from=build /app/package*.json ./
+COPY --from=build /app/yarn.lock* ./
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/host.json ./
+
+# Install only production dependencies
+RUN yarn install --production --frozen-lockfile --ignore-engines --prefer-offline
 
 # Create logs directory
 RUN mkdir -p logs
@@ -26,11 +44,9 @@ RUN mkdir -p logs
 # Expose port
 EXPOSE 3000
 
-# Health check
+# Health check (Express + Azure Functions hybrid)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:7071/api/health || exit 1
+  CMD curl -f http://localhost:3000/api/v1/health || exit 1
 
 # Default command (can be overridden)
 CMD ["func", "start", "--host", "0.0.0.0"]
-
-

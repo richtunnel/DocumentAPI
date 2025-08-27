@@ -1,79 +1,137 @@
-version: '3.8'
-
 services:
-  # SQL Server Database
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    ports:
+      - "3000:3000"  # Express API
+      - "7071:7071"  # Azure Functions (for health check compatibility)
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DATABASE_CONNECTION_STRING=mssql://sa:YourStrongPassword@mssql:1433/milestonepathway?encrypt=true&trustServerCertificate=true
+      - REDIS_CONNECTION_STRING=your-redis-connection-string
+      - AzureWebJobsStorage=UseDevelopmentStorage=true
+      - SERVICE_BUS_CONNECTION_STRING=Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=yourkey
+      - WEBHOOK_SECRET=your-webhook-secret-key
+      - DOCUMENTS_CONTAINER_NAME=demographics-documents
+      - FUNCTIONS_WORKER_RUNTIME=node
+      - DB_SERVER=your-sql-server.database.windows.net
+      - DB_DATABASE=your-database-name
+      - DB_USER=your-username
+      - DB_PASSWORD=your-password
+      - DB_PORT=1433
+      - QUEUE_CONNECTION_STRING=your-storage-account-connection-string
+      - API_KEY_ENCRYPTION_KEY=your-32-char-encryption-key
+      - ENVIRONMENT=development
+    volumes:
+      - .:/app
+    depends_on:
+      - mssql
+      - redis
+      - azurite
+    command: npm run dev  # Override to run Express via nodemon
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    environment:
+      - NODE_ENV=development
+      - DATABASE_CONNECTION_STRING=mssql://sa:Green$un@83@mssql:1433/milestonepartners?encrypt=true&trustServerCertificate=true
+      - REDIS_CONNECTION_STRING=your-redis-connection-string
+      - AzureWebJobsStorage=UseDevelopmentStorage=true
+      - SERVICE_BUS_CONNECTION_STRING=Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=yourkey
+      - FUNCTIONS_WORKER_RUNTIME=node
+      - DB_SERVER=your-sql-server.database.windows.net
+      - DB_DATABASE=your-database-name
+      - DB_USER=your-username
+      - DB_PASSWORD=your-password
+      - DB_PORT=1433
+      - QUEUE_CONNECTION_STRING=your-storage-account-connection-string
+      - WEBHOOK_SECRET=your-webhook-secret-key
+      - API_KEY_ENCRYPTION_KEY=your-32-char-encryption-key
+      - ENVIRONMENT=development
+    depends_on:
+      - mssql
+      - redis
+      - azurite
+    command: npm run worker  # Run Azure Function worker
+
+  webhook-processor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    environment:
+      - NODE_ENV=development
+      - DATABASE_CONNECTION_STRING=mssql://sa:Green$un@83@mssql:1433/milestone_partners?encrypt=true&trustServerCertificate=true
+      - REDIS_CONNECTION_STRING=your-redis-connection-string
+      - AzureWebJobsStorage=UseDevelopmentStorage=true
+      - SERVICE_BUS_CONNECTION_STRING=Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=yourkey
+      - FUNCTIONS_WORKER_RUNTIME=node
+      - DB_SERVER=your-sql-server.database.windows.net
+      - DB_DATABASE=your-database-name
+      - DB_USER=your-username
+      - DB_PASSWORD=your-password
+      - DB_PORT=1433
+      - QUEUE_CONNECTION_STRING=your-storage-account-connection-string
+      - WEBHOOK_SECRET=your-webhook-secret-key
+      - API_KEY_ENCRYPTION_KEY=your-32-char-encryption-key
+      - ENVIRONMENT=development
+    depends_on:
+      - mssql
+      - redis
+      - azurite
+    command: npm run webhook-processor  # Run Azure Function webhook processor
+
   mssql:
     image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: demographics-mssql
+    platform: linux/amd64
     environment:
-      ACCEPT_EULA: Y
-      SA_PASSWORD: YourStrong@Password123
-      MSSQL_PID: Developer
+      - SA_PASSWORD=Green$un@83
+      - ACCEPT_EULA=Y
+      - MSSQL_PID=Developer
+      - MSSQL_USER=sa
     ports:
       - "1433:1433"
     volumes:
-      - mssql_data:/var/opt/mssql
-      - ./scripts:/scripts
-    restart: unless-stopped
-    healthcheck:
-      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P YourStrong@Password123 -Q "SELECT 1"
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
-  # Redis for Rate Limiting
+      - mssql-data:/var/opt/mssql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    # healthcheck:
+    # test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P ${SA_PASSWORD} -Q "SELECT 1" || exit 1
+    # interval: 10s
+    # timeout: 5s
+    # retries: 5
+    # start_period: 30s
   redis:
-    image: redis:7-alpine
-    container_name: demographics-redis
+    image: redis:7.0
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
-    restart: unless-stopped
-    command: redis-server --appendonly yes
-    healthcheck:
-      test: redis-cli ping
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      - redis-data:/data
 
-  # Azurite for Local Storage (Azure Storage Emulator)
   azurite:
-    image: mcr.microsoft.com/azure-storage/azurite:latest
-    container_name: demographics-azurite
+    image: mcr.microsoft.com/azure-storage/azurite
     ports:
       - "10000:10000"  # Blob service
       - "10001:10001"  # Queue service
       - "10002:10002"  # Table service
     volumes:
-      - azurite_data:/data
-    command: azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --location /data --debug /data/debug.log
-    restart: unless-stopped
+      - azurite-data:/data
 
-  # Database Initialization
-  db-init:
-    image: mcr.microsoft.com/mssql-tools
-    container_name: demographics-db-init
-    depends_on:
-      mssql:
-        condition: service_healthy
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
     volumes:
-      - ./scripts:/scripts
-    command: >
-      bash -c "
-        echo 'Waiting for SQL Server to be ready...'
-        sleep 10
-        echo 'Running database initialization...'
-        /opt/mssql-tools/bin/sqlcmd -S mssql -U sa -P YourStrong@Password123 -i /scripts/init-database.sql
-        echo 'Database initialization completed!'
-      "
-    restart: "no"
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - api
 
 volumes:
-  mssql_data:
-    driver: local
-  redis_data:
-    driver: local
-  azurite_data:
-    driver: local
+  mssql-data:
+  redis-data:
+  azurite-data:
