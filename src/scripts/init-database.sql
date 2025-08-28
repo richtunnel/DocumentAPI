@@ -294,3 +294,21 @@ CREATE TABLE ApiKeys (
     INDEX IX_ApiKeys_Status (status),
     INDEX IX_ApiKeys_ExpiresAt (expires_at)
 );
+
+CREATE TABLE idempotency_records (
+  law_firm NVARCHAR(75) NOT NULL,
+  idempotency_key UNIQUEIDENTIFIER NOT NULL,
+  method NVARCHAR(10) NOT NULL,
+  path NVARCHAR(500) NOT NULL,
+  request_hash NVARCHAR(64) NOT NULL,
+  response_status INT NOT NULL,
+  response_body NVARCHAR(MAX) NOT NULL,
+  expires_at DATETIME2 NOT NULL,
+  PRIMARY KEY (law_firm, idempotency_key)
+);
+
+
+-- Next, insert mock data #edit
+INSERT INTO Demographics (id, partitionKey, law_firm, firstname, lastname, email, phone, primarylawfirm, claimanttype, created_at, updated_at, created_by, status) VALUES
+(NEWID(), 'Test Firm', 'Test Firm', 'John', 'Doe', 'john@test.com', '5551234567', 'Test Firm', 'Adult', GETUTCDATE(), GETUTCDATE(), NEWID(), 'active'),
+(NEWID(), 'Test Firm', 'Test Firm', 'Jane', 'Smith', 'jane@test.com', '5559876543', 'Test Firm', 'Minor', GETUTCDATE(), GETUTCDATE(), NEWID(), 'active');

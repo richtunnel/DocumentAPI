@@ -1,0 +1,304 @@
+{
+  "info": {
+    "name": "Demographics API - Live Demo",
+    "description": "Complete demo collection for team presentation",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/v1"
+    },
+    {
+      "key": "apiKey",
+      "value": "YOUR_API_KEY_HERE"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. System Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('System is healthy', function () {",
+              "    pm.response.to.have.status(200);",
+              "    pm.expect(pm.response.json().status).to.eql('healthy');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Create Demo API Key",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Demo Presentation Key\",\n  \"law_firm\": \"Demo Law Firm\",\n  \"created_by_email\": \"demo@lawfirm.com\",\n  \"scopes\": [\"demographics:read\", \"demographics:write\", \"demographics:admin\", \"files:upload\"],\n  \"rate_limits\": {\n    \"requests_per_minute\": 1000,\n    \"requests_per_hour\": 10000,\n    \"requests_per_day\": 100000,\n    \"burst_limit\": 500\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/admin/api-keys",
+          "host": ["{{baseUrl}}"],
+          "path": ["admin", "api-keys"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "    const response = pm.response.json();",
+              "    pm.collectionVariables.set('apiKey', response.data.key);",
+              "    pm.test('API Key created', function () {",
+              "        pm.expect(response.data.key).to.match(/^ak_/);",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Generate Document Upload URL",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-API-Key",
+            "value": "{{apiKey}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fileName\": \"demo-legal-document.pdf\",\n  \"contentType\": \"application/pdf\",\n  \"documentType\": \"demographics_form\",\n  \"maxFileSizeMB\": 10\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/documents/upload-url",
+          "host": ["{{baseUrl}}"],
+          "path": ["documents", "upload-url"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    const response = pm.response.json();",
+              "    pm.collectionVariables.set('uploadUrl', response.data.uploadUrl);",
+              "    pm.collectionVariables.set('correlationId', response.data.correlationId);",
+              "    pm.test('Upload URL generated', function () {",
+              "        pm.expect(response.data.uploadUrl).to.include('blob.core.windows.net');",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Submit Demographics (Single)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-API-Key",
+            "value": "{{apiKey}}"
+          },
+          {
+            "key": "X-Idempotency-Key",
+            "value": "{{$guid}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"law_firm\": \"Demo Law Firm\",\n  \"firstname\": \"John\",\n  \"lastname\": \"DemoClient\",\n  \"email\": \"john.democlient@lawfirm.com\",\n  \"phone\": \"5551234567\",\n  \"primarylawfirm\": \"Demo Law Firm\",\n  \"claimanttype\": \"Adult\",\n  \"city\": \"Dallas\",\n  \"state\": \"TX\",\n  \"zipcode\": \"75001\",\n  \"address1\": \"123 Demo Street\",\n  \"dob\": \"1985-06-15T00:00:00Z\",\n  \"basegrossaward\": 75000.00,\n  \"totalgrossaward\": 75000.00,\n  \"netclaimantpayment\": 52500.00,\n  \"attorney1name\": \"Jane Attorney\",\n  \"attorney1feepercent\": 0.30,\n  \"attorney1fees\": 22500.00\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/demographics",
+          "host": ["{{baseUrl}}"],
+          "path": ["demographics"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "    const response = pm.response.json();",
+              "    pm.collectionVariables.set('demographicsId', response.data.id);",
+              "    pm.test('Demographics submitted', function () {",
+              "        pm.expect(response.data.id).to.match(/^[0-9a-f-]{36}$/);",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Submit Demographics (Batch)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-API-Key",
+            "value": "{{apiKey}}"
+          },
+          {
+            "key": "X-Idempotency-Key",
+            "value": "{{$guid}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"demographics\": [\n    {\n      \"law_firm\": \"Demo Law Firm\",\n      \"firstname\": \"Alice\",\n      \"lastname\": \"BatchDemo1\",\n      \"email\": \"alice@batch.demo\",\n      \"phone\": \"5551111111\",\n      \"primarylawfirm\": \"Demo Law Firm\",\n      \"claimanttype\": \"Adult\",\n      \"basegrossaward\": 45000.00\n    },\n    {\n      \"law_firm\": \"Demo Law Firm\",\n      \"firstname\": \"Bob\",\n      \"lastname\": \"BatchDemo2\",\n      \"email\": \"bob@batch.demo\",\n      \"phone\": \"5552222222\",\n      \"primarylawfirm\": \"Demo Law Firm\",\n      \"claimanttype\": \"Minor\",\n      \"basegrossaward\": 60000.00\n    }\n  ],\n  \"batch_options\": {\n    \"priority\": 8,\n    \"notify_on_completion\": true\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/demographics/batch",
+          "host": ["{{baseUrl}}"],
+          "path": ["demographics", "batch"]
+        }
+      }
+    },
+    {
+      "name": "6. Get Demographics List",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "{{apiKey}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/demographics?limit=10&offset=0",
+          "host": ["{{baseUrl}}"],
+          "path": ["demographics"],
+          "query": [
+            {
+              "key": "limit",
+              "value": "10"
+            },
+            {
+              "key": "offset",
+              "value": "0"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "7. Get Specific Demographics",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "{{apiKey}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/demographics/{{demographicsId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["demographics", "{{demographicsId}}"]
+        }
+      }
+    },
+    {
+      "name": "8. Update Demographics",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-API-Key",
+            "value": "{{apiKey}}"
+          },
+          {
+            "key": "X-Idempotency-Key",
+            "value": "{{$guid}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"law_firm\": \"Demo Law Firm\",\n  \"firstname\": \"John Updated\",\n  \"lastname\": \"DemoClient\",\n  \"email\": \"john.democlient@lawfirm.com\",\n  \"phone\": \"5551234567\",\n  \"primarylawfirm\": \"Demo Law Firm\",\n  \"claimanttype\": \"Adult\",\n  \"city\": \"Austin\",\n  \"state\": \"TX\",\n  \"zipcode\": \"78701\",\n  \"basegrossaward\": 80000.00\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/demographics/{{demographicsId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["demographics", "{{demographicsId}}"]
+        }
+      }
+    },
+    {
+      "name": "9. Monitor Queue Status",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "{{apiKey}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/monitoring/queues",
+          "host": ["{{baseUrl}}"],
+          "path": ["monitoring", "queues"]
+        }
+      }
+    },
+    {
+      "name": "10. System Metrics",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "{{apiKey}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/monitoring/metrics",
+          "host": ["{{baseUrl}}"],
+          "path": ["monitoring", "metrics"]
+        }
+      }
+    }
+  ]
+}

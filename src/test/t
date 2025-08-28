@@ -1,0 +1,34 @@
+const axios = require('axios');
+const dotenv = require("dotenv");
+
+async function testWorkers() {
+  const baseUrl = 'http://localhost:3000/api/v1';
+  const apiKey = process.env.API_KEY_ENCRYPTION_KEY;
+  
+  // Submit demographics to trigger workers
+  const response = await axios.post(`${baseUrl}/demographics`, {
+    law_firm: 'Test Firm',
+    firstname: 'Worker',
+    lastname: 'Test',
+    email: 'worker@test.com',
+    phone: '5551234567',
+    primarylawfirm: 'Test Firm',
+    claimanttype: 'Adult'
+  }, { headers: { 'X-API-Key': apiKey } });
+  
+  console.log('Demographics submitted:', response.data.data.id);
+  
+  // Check queue status every 2 seconds
+  setInterval(async () => {
+    try {
+      const queueStatus = await axios.get(`${baseUrl}/monitoring/queues`, {
+        headers: { 'X-API-Key': apiKey }
+      });
+      console.log('Queue status:', queueStatus.data);
+    } catch (err) {
+      console.log('Queue monitoring unavailable');
+    }
+  }, 2000);
+}
+
+testWorkers();

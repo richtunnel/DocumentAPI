@@ -21,6 +21,12 @@ COPY src/ ./src/
 # Build TypeScript
 RUN yarn build
 
+USER root
+COPY src/scripts/init-database.sql /usr/src/app/init-database.sql
+COPY src/scripts/init-db.sh /usr/src/app/init-db.sh
+RUN chmod +x /usr/src/app/init-db.sh
+
+USER mssql
 
 # Production image
 FROM mcr.microsoft.com/azure-functions/node:4.0-node20

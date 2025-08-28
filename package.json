@@ -5,7 +5,9 @@
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc",
-    "dev": "NODE_ENV=development nodemon dist/express-app/server.js",
+    "dev": "NODE_ENV=development ts-node-dev --respawn --transpile-only src/express-app/server.ts",
+    "dev:express": "NODE_ENV=development ts-node-dev --respawn --transpile-only src/express-app/server.ts",
+    "dev:functions": "NODE_ENV=development tsc && func start",
     "worker": "NODE_ENV=development node dist/azure-functions/workers/demographicsWorker.js",
     "webhook-processor": "node dist/azure-functions/workers/webhookProcessor.js",
     "test": "jest",
@@ -23,7 +25,11 @@
     "test-webhook": "node scripts/log-monitor.js test-webhook",
     "config": "node scripts/log-monitor.js config",
     "full-test": "concurrently \"npm run monitor\" \"sleep 5 && npm run test:all\"",
-    "install-deps": "npm install @azure/service-bus @azure/identity @azure/monitor-query @azure/storage-blob concurrently"
+    "install-deps": "npm install @azure/service-bus @azure/identity @azure/monitor-query @azure/storage-blob concurrently",
+    "demo:setup": "chmod +x src/demo/setup-demo.sh && ./src/demo/setup-demo.sh",
+    "demo:monitor": "node src/demo/monitor-dashboard.js",
+    "demo:logs": "chmod +x src/demo/watch-logs.sh && ./src/demo/watch-logs.sh",
+    "demo:clean": "docker-compose down -v && rm -rf demo-files"
   },
   "dependencies": {
     "@azure/ai-form-recognizer": "^5.1.0",
