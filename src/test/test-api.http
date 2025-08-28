@@ -1,0 +1,146 @@
+### Variables
+@baseUrl = http://localhost:3000/api/v1
+@functionsUrl = http://localhost:7071/api
+@apiKey = {{$processEnv API_KEY}}
+
+### 1. Health Check - Express API
+GET {{baseUrl}}/health
+
+### 2. Health Check - Azure Functions (if running)
+GET {{functionsUrl}}/health
+
+### 3. Create API Key (Development only)
+POST {{baseUrl}}/admin/api-keys
+Content-Type: application/json
+
+{
+  "name": "VSCode Test Key",
+  "law_firm": "VSCode Test Firm",
+  "created_by_email": "vscode@test.com",
+  "scopes": ["demographics:read", "demographics:write", "demographics:admin"],
+  "rate_limits": {
+    "requests_per_minute": 100,
+    "requests_per_hour": 5000,
+    "requests_per_day": 50000,
+    "burst_limit": 200
+  }
+}
+
+### 4. Test Demographics Submission
+# @name submitDemographics
+POST {{baseUrl}}/demographics
+Content-Type: application/json
+X-API-Key: ak_your_api_key_here_replace_this
+X-Idempotency-Key: {{$guid}}
+
+{
+  "law_firm": "VSCode Test Firm",
+  "firstname": "John",
+  "lastname": "VSCodeTest",
+  "email": "john.vscode@test.com",
+  "phone": "5551234567",
+  "primarylawfirm": "VSCode Test Firm",
+  "claimanttype": "Adult",
+  "city": "Dallas",
+  "state": "TX",
+  "zipcode": "75001",
+  "address1": "123 Test Street",
+  "dob": "1985-06-15T00:00:00Z",
+  "basegrossaward": 50000.00,
+  "totalgrossaward": 50000.00,
+  "netclaimantpayment": 35000.00
+}
+
+### 5. Get Demographics List
+GET {{baseUrl}}/demographics?limit=10&offset=0
+X-API-Key: ak_your_api_key_here_replace_this
+
+### 6. Get Specific Demographics Record
+# Use ID from previous response
+GET {{baseUrl}}/demographics/{{submitDemographics.response.body.data.id}}
+X-API-Key: ak_your_api_key_here_replace_this
+
+### 7. Update Demographics Record
+PUT {{baseUrl}}/demographics/{{submitDemographics.response.body.data.id}}
+Content-Type: application/json
+X-API-Key: ak_your_api_key_here_replace_this
+X-Idempotency-Key: {{$guid}}
+
+{
+  "law_firm": "VSCode Test Firm",
+  "firstname": "John Updated",
+  "lastname": "VSCodeTest",
+  "email": "john.vscode@test.com",
+  "phone": "5551234567",
+  "primarylawfirm": "VSCode Test Firm",
+  "claimanttype": "Adult",
+  "city": "Austin",
+  "state": "TX",
+  "zipcode": "78701",
+  "basegrossaward": 55000.00
+}
+
+### 8. Batch Demographics Submission
+POST {{baseUrl}}/demographics/batch
+Content-Type: application/json
+X-API-Key: ak_your_api_key_here_replace_this
+X-Idempotency-Key: {{$guid}}
+
+{
+  "demographics": [
+    {
+      "law_firm": "VSCode Test Firm",
+      "firstname": "Alice",
+      "lastname": "Batch1",
+      "email": "alice@batch.com",
+      "phone": "5551111111",
+      "primarylawfirm": "VSCode Test Firm",
+      "claimanttype": "Adult"
+    },
+    {
+      "law_firm": "VSCode Test Firm",
+      "firstname": "Bob",
+      "lastname": "Batch2", 
+      "email": "bob@batch.com",
+      "phone": "5552222222",
+      "primarylawfirm": "VSCode Test Firm",
+      "claimanttype": "Adult"
+    }
+  ],
+  "batch_options": {
+    "priority": 7,
+    "notify_on_completion": true
+  }
+}
+
+### 9. Generate Document Upload URL
+POST {{baseUrl}}/documents/upload-url
+Content-Type: application/json
+X-API-Key: ak_your_api_key_here_replace_this
+
+{
+  "fileName": "test-document.pdf",
+  "contentType": "application/pdf",
+  "documentType": "demographics_form",
+  "maxFileSizeMB": 5
+}
+
+### 10. Monitor Queue Status (if monitoring endpoints exist)
+GET {{baseUrl}}/monitoring/queues
+X-API-Key: ak_your_api_key_here_replace_this
+
+### 11. Monitor System Metrics
+GET {{baseUrl}}/monitoring/metrics
+X-API-Key: ak_your_api_key_here_replace_this
+
+### 12. Test Rate Limiting (send multiple rapid requests)
+GET {{baseUrl}}/demographics
+X-API-Key: ak_your_api_key_here_replace_this
+
+###
+GET {{baseUrl}}/demographics
+X-API-Key: ak_your_api_key_here_replace_this
+
+###
+GET {{baseUrl}}/demographics
+X-API-Key: ak_your_api_key_here_replace_this

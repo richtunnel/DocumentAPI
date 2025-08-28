@@ -10,6 +10,7 @@ WORKDIR /app
 COPY package*.json yarn.lock* ./
 COPY tsconfig.json ./
 COPY host.json ./
+COPY local.settings.json ./
 
 # Install ALL dependencies (including dev) for build
 RUN yarn install --frozen-lockfile --ignore-engines

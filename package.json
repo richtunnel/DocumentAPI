@@ -5,8 +5,8 @@
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc",
-    "dev": "nodemon dist/express-app/server.js",
-    "worker": "node dist/azure-functions/workers/demographicsWorker.js",
+    "dev": "NODE_ENV=development nodemon dist/express-app/server.js",
+    "worker": "NODE_ENV=development node dist/azure-functions/workers/demographicsWorker.js",
     "webhook-processor": "node dist/azure-functions/workers/webhookProcessor.js",
     "test": "jest",
     "test:unit": "jest --config jest.config.js",

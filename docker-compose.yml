@@ -11,7 +11,7 @@ services:
       - NODE_ENV=development
       - PORT=3000
       - DATABASE_CONNECTION_STRING=mssql://sa:GreenSun83**@mssql:1433/PartnersDB?encrypt=true&trustServerCertificate=true
-      - REDIS_CONNECTION_STRING=your-redis-connection-string
+      - REDIS_CONNECTION_STRING=redis://localhost:6379
       - AzureWebJobsStorage=UseDevelopmentStorage=true
       - SERVICE_BUS_CONNECTION_STRING=Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=yourkey
       - WEBHOOK_SECRET=BUhOuLh3wDw1dX8610Be7C6Vw8UWUupq09mVQzkADKl0CC2Ad70LnKYqjiRIdj6JxFOg2cU08scYb0UnyIxlfatxR68n2wu
@@ -42,7 +42,7 @@ services:
     environment:
       - NODE_ENV=development
       - DATABASE_CONNECTION_STRING=mssql://sa:GreenSun83**@mssql:1433/PartnersDB?encrypt=true&trustServerCertificate=true
-      - REDIS_CONNECTION_STRING=your-redis-connection-string
+      - REDIS_CONNECTION_STRING=redis://localhost:6379
       - AzureWebJobsStorage=UseDevelopmentStorage=true
       - SERVICE_BUS_CONNECTION_STRING=Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=yourkey
       - FUNCTIONS_WORKER_RUNTIME=node
@@ -69,7 +69,7 @@ services:
     environment:
       - NODE_ENV=development
       - DATABASE_CONNECTION_STRING=mssql://sa:GreenSun83**@mssql:1433/PartnersDB?encrypt=true&trustServerCertificate=true
-      - REDIS_CONNECTION_STRING=your-redis-connection-string
+      - REDIS_CONNECTION_STRING=redis://localhost:6379
       - AzureWebJobsStorage=UseDevelopmentStorage=true
       - SERVICE_BUS_CONNECTION_STRING=Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=yourkey
       - FUNCTIONS_WORKER_RUNTIME=node
@@ -101,7 +101,7 @@ services:
       - mssql-data:/var/opt/mssql
       - ./src/scripts/init-database.sql:/docker-entrypoint-initdb.d/init-database.sql
     healthcheck:
-      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P GreenSun83** -Q "SELECT 1" || exit 1
+      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "GreenSun83**" -d master -Q "SELECT 1" || exit 1
       interval: 10s
       timeout: 5s
       retries: 10
