@@ -2,11 +2,11 @@ import sql from 'mssql';
 import { logger } from '../shared/services/logger.service';
 
 const config: sql.config = {
-  server: process.env.SQL_SERVER || 'localhost',
-  database: process.env.SQL_DATABASE || 'demographics',
-  user: process.env.SQL_USER,
-  password: process.env.SQL_PASSWORD,
-  port: parseInt(process.env.SQL_PORT || '1433'),
+  server: process.env.DB_SERVER || 'localhost',
+  database: process.env.SQL_DATABASE || 'PartnersDB',
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  port: parseInt(process.env.DB_PORT || '1433'),
   options: {
     encrypt: true, // Required for Azure SQL
     trustServerCertificate: process.env.NODE_ENV === 'development',

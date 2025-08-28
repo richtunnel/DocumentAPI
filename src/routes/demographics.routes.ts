@@ -7,7 +7,7 @@ import {
   GetDemographicsQuerySchema,
   GetDemographicsQuery,
   BatchSubmitSchema,
-} from '../shared/types/demographics'; // Correct import path
+} from '../shared/types/demographics';
 import { databaseService } from '../shared/database/database.service';
 import { fifoQueueService } from '../shared/services/fifoQueue.service';
 import { logger } from '../shared/services/logger.service';

@@ -1,4 +1,4 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -7,6 +7,7 @@ import { loggingMiddleware } from '../middleware/logger.middleware';
 import { errorMiddleware } from '../middleware/error.middleware';
 import { securityMiddleware } from '../middleware/security.middleware';
 import client from 'prom-client';
+import logger from '../shared/services/logger.service';
 
 // Routes
 import demographicsRoutes from '../routes/demographics.routes';
@@ -48,6 +49,17 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(securityMiddleware);
 app.use(loggingMiddleware);
+// Global error handler (must be last)
+app.use(errorMiddleware);
+// app._router.stack.forEach((route: any) => {
+//   if (route.route) {
+//     logger.info("Registered route", {
+//       path: route.route.path,
+//       method: route.route.stack[0].method,
+//     });
+//   }
+
+// })
 
 // API Routes (v1)
 app.use('/api/v1/demographics', demographicsRoutes);
@@ -116,7 +128,7 @@ app.use('*', (req, res) => {
   });
 });
 
-// Global error handler (must be last)
-app.use(errorMiddleware);
+
+
 
 export default app;
