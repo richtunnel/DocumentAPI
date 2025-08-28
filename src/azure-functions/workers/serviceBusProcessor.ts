@@ -1,16 +1,6 @@
 import { app, InvocationContext } from '@azure/functions';
-import winston from 'winston';
+import logger from '../../shared/services/logger.service';
 
-const logger = winston.createLogger({
-  level: 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [
-    new winston.transports.Console()
-  ]
-});
 
 // Event-driven Service Bus trigger - fires ONLY when messages arrive
 async function processDemographicsMessage(message: unknown, context: InvocationContext): Promise<void> {

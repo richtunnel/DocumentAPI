@@ -46,7 +46,7 @@ A production-ready Demographics API built with Express.js, implementing the **Cl
 - **API Framework**: Express.js with TypeScript
 - **Queue System**: Azure Service Bus
 - **Document Storage**: Azure Blob Storage (Claim Check Pattern)
-- **Database**: Azure Cosmos DB
+- **Database**: SQL Server
 - **Validation**: Zod with passthrough support
 - **Authentication**: JWT tokens
 - **Logging**: Winston
@@ -187,8 +187,8 @@ WEBHOOK_RETRY_ATTEMPTS=3            # Max webhook retries
 DOCUMENTS_CONTAINER_NAME=demographics-documents
 
 # Database
-COSMOS_DATABASE_NAME=milestonepathway
-COSMOS_CONTAINER_NAME=demographics
+DATABASE_NAME=Partnersdb
+APP_CONTAINER_NAME=demographics
 ```
 
 ## 📝 Data Model

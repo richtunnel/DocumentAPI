@@ -15,7 +15,7 @@ services:
       - DB_SERVER=mssql
       - DB_DATABASE=PartnersDB  
       - DB_USER=sa
-      - DB_PASSWORD=YourStrong@Password123
+      - DB_PASSWORD=${DB_PASSWORD}
       - DB_PORT=1433
       # Redis Rate Limiting
       - REDIS_CONNECTION_STRING=redis://redis:6379
@@ -23,8 +23,8 @@ services:
       - QUEUE_CONNECTION_STRING=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;QueueEndpoint=http://azurite:10001/devstoreaccount1;
       # Security
       - JWT_SECRET=your-development-jwt-secret-key-32-chars-minimum
-      - API_KEY_ENCRYPTION_KEY=your-32-character-encryption-key
-      - WEBHOOK_SECRET=your-webhook-secret-key
+      - API_KEY_ENCRYPTION_KEY=${API_KEY_ENCRYPTION_KEY}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
       - ENVIRONMENT=development
     volumes:
       - ./src:/home/site/wwwroot/src

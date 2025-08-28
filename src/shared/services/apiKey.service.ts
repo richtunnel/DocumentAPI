@@ -11,7 +11,7 @@ class ApiKeyService {
   private readonly encryptionKey: string;
 
   constructor() {
-    this.encryptionKey = process.env.API_KEY_ENCRYPTION_KEY!;
+    this.encryptionKey = process.env.API_KEY_ENCRYPTION_KEY! || "fVLnMgvPKaGlJdiAtIXrV7Jw4vgvop2M58DvREkI0gdATicjonAKyl2jnCC4XdMpVo42Mq5Grt8eGgTs8hqBl24KFfoJtkTc";
     if (!this.encryptionKey || this.encryptionKey.length < 32) {
       throw new Error('API_KEY_ENCRYPTION_KEY must be at least 32 characters');
     }
